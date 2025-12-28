@@ -27,7 +27,7 @@ const THEMES = {
 };
 
 export default function Home() {
-  const [view, setView] = useState("home"); 
+  const [view, setView] = useState("home"); // home | new | custom | load | manage | game
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -163,6 +163,10 @@ export default function Home() {
             </Button>
           </>
         )}
+
+        <Button subtle onClick={() => setView("new")}>
+          Back
+        </Button>
       </Screen>
     );
   }
@@ -203,6 +207,8 @@ export default function Home() {
     return (
       <Screen theme={THEMES.dark}>
         <h2>Manage Saves</h2>
+
+        {adventures.length === 0 && <p>No saved adventures.</p>}
 
         {adventures.map(a => (
           <Button danger key={a.id} onClick={() => setConfirmDelete(a.id)}>
@@ -338,6 +344,7 @@ function Screen({ children, theme }) {
 function Button({ children, onClick, subtle, danger }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         width: "100%",
