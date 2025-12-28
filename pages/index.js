@@ -37,25 +37,55 @@ const THEMES = {
 };
 
 /* =====================
-   DM STAGING
+   RICH DM NARRATION ENGINE
    ===================== */
-function dmSetTheStage({ theme, lastAction, universe }) {
-  const combat =
-    lastAction && /attack|fight|strike|kill|charge/i.test(lastAction);
+function dmNarrate({ theme, universe, tension = 0 }) {
+  const sensory = [
+    "The air hangs heavy, thick with unspoken tension.",
+    "Shadows shift subtly, refusing to remain still.",
+    "The silence here feels deliberate, as though listening.",
+    "A faint sound echoes from somewhere unseen.",
+    "The ground beneath you bears signs of long-forgotten events."
+  ];
+
+  const developments = [
+    "You become aware of details previously hidden from view.",
+    "Something in this place reacts to your presence.",
+    "The situation grows more complicated the longer you linger.",
+    "Clues suggest forces at work beyond the obvious.",
+    "The environment hints at both danger and opportunity."
+  ];
+
+  const hooks = [
+    "A choice presents itself, though its consequences are unclear.",
+    "Something nearby may reward closer inspection.",
+    "You sense that hesitation could be costly.",
+    "A path forward opens — or perhaps a trap.",
+    "The moment feels poised on the edge of change."
+  ];
+
+  const themeFlavor =
+    theme === "lovecraftian"
+      ? "Reality itself feels fragile, strained by incomprehensible forces."
+      : theme === "dark"
+      ? "This land bears the scars of cruelty and forgotten violence."
+      : "Hope and peril coexist uneasily in this realm.";
+
+  const enterCombat = tension > 30 || Math.random() < 0.25;
 
   const text = `
-${theme === "lovecraftian"
-  ? "Reality feels thin, watched by something vast."
-  : "The world responds to your choice."}
+${themeFlavor}
 
-${universe?.description || ""}
+${universe?.description ? universe.description + "\n" : ""}
 
-${lastAction
-  ? `Because you chose to "${lastAction}", events unfold.`
-  : "Your journey begins at the edge of the unknown."}
+${sensory[Math.floor(Math.random() * sensory.length)]}
+
+${developments[Math.floor(Math.random() * developments.length)]}
+
+${hooks[Math.floor(Math.random() * hooks.length)]}
 `.trim();
 
-  return { text, mode: combat ? "combat" : "narrative" };
+  return { text, mode: enterCombat ? "combat" : "narrative" };
 }
 
 /* =====================
@@ -67,11 +97,9 @@ export default function Home() {
   const [activeId, setActiveId] = useState(null);
 
   const [campaignName, setCampaignName] = useState("");
-
-  const [customUniverse, setCustomUniverse] = useState({ description: "" });
   const [customInput, setCustomInput] = useState("");
 
-  const [panel, setPanel] = useState("log");
+  const [panel, setPanel] = useState("log"); // log | character | inventory
   const [mode, setMode] = useState("narrative");
   const [playerInput, setPlayerInput] = useState("");
 
@@ -85,12 +113,10 @@ export default function Home() {
     try {
       const saved = JSON.parse(localStorage.getItem("adventures") || "[]");
       const settings = JSON.parse(localStorage.getItem("settings") || "{}");
-
       if (Array.isArray(saved)) {
         setAdventures(saved);
         if (saved.length) setActiveId(saved[saved.length - 1].id);
       }
-
       if (settings.textSize) setTextSize(settings.textSize);
       if (settings.font) setFont(settings.font);
     } catch {}
@@ -114,12 +140,10 @@ export default function Home() {
     return (
       <Screen theme={THEMES.dark} font={font} textSize={textSize}>
         <h1>Mythweaver</h1>
-
         {active && <Button onClick={() => setView("game")}>Continue</Button>}
         <Button onClick={() => setView("new")}>New Adventure</Button>
         <Button onClick={() => setView("load")}>Load Adventure</Button>
         <Button subtle onClick={() => setShowSettings(true)}>Settings</Button>
-
         {showSettings && <Settings />}
       </Screen>
     );
@@ -131,41 +155,21 @@ export default function Home() {
   if (view === "new") {
     return (
       <Screen theme={THEMES.dark} font={font} textSize={textSize}>
-        <CornerMenu
-          open={menuOpen}
-          toggle={() => setMenuOpen(o => !o)}
-          onExit={() => setView("home")}
-        />
-
         <h2>Name Your Campaign</h2>
-
         <input
           value={campaignName}
           onChange={e => setCampaignName(e.target.value)}
           placeholder="Campaign name"
           style={styles.input}
         />
-
         {Object.entries(THEMES).map(([key, t]) => (
-          <Button
-            key={key}
-            onClick={() => {
-              if (!campaignName.trim()) return;
-              createAdventure(key);
-            }}
-          >
+          <Button key={key} onClick={() => campaignName && createAdventure(key)}>
             {t.name}
           </Button>
         ))}
-
-        <Button onClick={() => {
-          if (!campaignName.trim()) return;
-          setCustomInput("");
-          setView("custom");
-        }}>
+        <Button onClick={() => campaignName && setView("custom")}>
           Build Custom Campaign
         </Button>
-
         <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
@@ -177,21 +181,13 @@ export default function Home() {
   if (view === "custom") {
     return (
       <Screen theme={THEMES.dark} font={font} textSize={textSize}>
-        <CornerMenu
-          open={menuOpen}
-          toggle={() => setMenuOpen(o => !o)}
-          onExit={() => setView("home")}
-        />
-
         <h2>Describe Your World</h2>
-
         <textarea
           value={customInput}
           onChange={e => setCustomInput(e.target.value)}
-          placeholder="Ancient ruins, cruel gods, fading magic..."
+          placeholder="Ancient ruins, cruel gods, creeping madness…"
           style={styles.textarea}
         />
-
         <Button onClick={createCustomAdventure}>Begin Campaign</Button>
         <Button subtle onClick={() => setView("new")}>Back</Button>
       </Screen>
@@ -204,28 +200,16 @@ export default function Home() {
   if (view === "load") {
     return (
       <Screen theme={THEMES.dark} font={font} textSize={textSize}>
-        <CornerMenu
-          open={menuOpen}
-          toggle={() => setMenuOpen(o => !o)}
-          onExit={() => setView("home")}
-        />
-
         <h2>Load Adventure</h2>
-
         {adventures.length === 0 && <p>No saved campaigns.</p>}
-
         {adventures.map(a => (
-          <Button
-            key={a.id}
-            onClick={() => {
-              setActiveId(a.id);
-              setView("game");
-            }}
-          >
+          <Button key={a.id} onClick={() => {
+            setActiveId(a.id);
+            setView("game");
+          }}>
             {a.name}
           </Button>
         ))}
-
         <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
@@ -242,7 +226,6 @@ export default function Home() {
         <CornerMenu
           open={menuOpen}
           toggle={() => setMenuOpen(o => !o)}
-          onSave={() => localStorage.setItem("adventures", JSON.stringify(adventures))}
           onHome={() => setView("home")}
           onSettings={() => setShowSettings(true)}
           onExit={() => setView("home")}
@@ -252,21 +235,31 @@ export default function Home() {
 
         <div style={{ display: "flex", gap: 6 }}>
           <Button onClick={() => setPanel("log")}>Story</Button>
+          <Button onClick={() => setPanel("character")}>Character</Button>
           <Button onClick={() => setPanel("inventory")}>Inventory</Button>
         </div>
 
         {panel === "log" && (
           <>
             {active.log.map((l, i) => <p key={i}>{l}</p>)}
-
             <textarea
               value={playerInput}
               onChange={e => setPlayerInput(e.target.value)}
               placeholder="What do you do next?"
               style={styles.textarea}
             />
-
             <Button onClick={handleAction}>Continue</Button>
+          </>
+        )}
+
+        {panel === "character" && (
+          <>
+            <p>Level: {active.character.level}</p>
+            <p>HP: {active.character.hp}/{active.character.maxHp}</p>
+            <p>STR: {active.character.str}</p>
+            <p>DEX: {active.character.dex}</p>
+            <p>INT: {active.character.int}</p>
+            <p>Alignment: {active.character.alignment}</p>
           </>
         )}
 
@@ -296,17 +289,24 @@ export default function Home() {
      LOGIC
      ===================== */
   function createAdventure(themeKey) {
-    const opening = dmSetTheStage({ theme: themeKey });
-
+    const opening = dmNarrate({ theme: themeKey });
     const adv = {
       id: `adv-${Date.now()}`,
       name: campaignName,
       theme: themeKey,
       universe: null,
       log: [opening.text],
-      inventory: []
+      inventory: [],
+      character: {
+        level: 1,
+        hp: 10,
+        maxHp: 10,
+        str: 10,
+        dex: 10,
+        int: 10,
+        alignment: 0
+      }
     };
-
     setAdventures(prev => [...prev, adv]);
     setActiveId(adv.id);
     setMode(opening.mode);
@@ -315,17 +315,24 @@ export default function Home() {
 
   function createCustomAdventure() {
     const universe = { description: customInput };
-    const opening = dmSetTheStage({ theme: "dark", universe });
-
+    const opening = dmNarrate({ theme: "dark", universe });
     const adv = {
       id: `adv-${Date.now()}`,
       name: campaignName,
       theme: "dark",
       universe,
       log: [opening.text],
-      inventory: []
+      inventory: [],
+      character: {
+        level: 1,
+        hp: 10,
+        maxHp: 10,
+        str: 10,
+        dex: 10,
+        int: 10,
+        alignment: 0
+      }
     };
-
     setAdventures(prev => [...prev, adv]);
     setActiveId(adv.id);
     setMode(opening.mode);
@@ -334,18 +341,15 @@ export default function Home() {
 
   function handleAction() {
     if (!playerInput.trim()) return;
-
-    const dm = dmSetTheStage({
+    const dm = dmNarrate({
       theme: active.theme,
-      lastAction: playerInput,
-      universe: active.universe
+      universe: active.universe,
+      tension: active.character.alignment < 0 ? 40 : 0
     });
-
     const updated = {
       ...active,
-      log: [...active.log, `You: ${playerInput}`, dm.text]
+      log: [...active.log, dm.text]
     };
-
     setMode(dm.mode);
     setPlayerInput("");
     setAdventures(adventures.map(a => a.id === active.id ? updated : a));
@@ -353,12 +357,11 @@ export default function Home() {
 
   function attack() {
     const roll = rollDie(20);
-
+    const hit = roll >= 12;
     const updated = {
       ...active,
-      log: [...active.log, `You attack (roll ${roll}).`]
+      log: [...active.log, hit ? "Your attack strikes true." : "Your blow misses."]
     };
-
     setMode("narrative");
     setAdventures(adventures.map(a => a.id === active.id ? updated : a));
   }
@@ -367,21 +370,18 @@ export default function Home() {
     return (
       <div style={styles.settings}>
         <h3>Settings</h3>
-
         <label>Text Size</label>
         <select value={textSize} onChange={e => setTextSize(e.target.value)}>
           <option value="small">Small</option>
           <option value="medium">Medium</option>
           <option value="large">Large</option>
         </select>
-
         <label>Font</label>
         <select value={font} onChange={e => setFont(e.target.value)}>
           <option value="serif">Serif</option>
           <option value="sans-serif">Sans</option>
           <option value="monospace">Monospace</option>
         </select>
-
         <Button onClick={() => setShowSettings(false)}>Close</Button>
       </div>
     );
@@ -389,7 +389,7 @@ export default function Home() {
 }
 
 /* =====================
-   UI COMPONENTS
+   UI
    ===================== */
 function Screen({ children, theme, font, textSize }) {
   const sizes = { small: 14, medium: 16, large: 18 };
@@ -407,15 +407,14 @@ function Screen({ children, theme, font, textSize }) {
   );
 }
 
-function CornerMenu({ open, toggle, onSave, onHome, onSettings, onExit }) {
+function CornerMenu({ open, toggle, onHome, onSettings, onExit }) {
   return (
     <div style={{ position: "absolute", top: 10, right: 10 }}>
       <button onClick={toggle}>☰</button>
       {open && (
         <div style={styles.menu}>
-          {onSave && <Button onClick={onSave}>Manual Save</Button>}
-          {onHome && <Button onClick={onHome}>Home</Button>}
-          {onSettings && <Button onClick={onSettings}>Settings</Button>}
+          <Button onClick={onHome}>Home</Button>
+          <Button onClick={onSettings}>Settings</Button>
           <Button onClick={onExit}>Exit Game</Button>
         </div>
       )}
