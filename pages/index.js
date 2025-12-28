@@ -16,7 +16,7 @@ const d20 = m => {
    ========================= */
 
 export default function Home() {
-  const [screen, setScreen] = useState("menu"); // menu | game
+  const [screen, setScreen] = useState("menu");
   const [campaigns, setCampaigns] = useState([]);
   const [current, setCurrent] = useState(null);
   const [input, setInput] = useState("");
@@ -24,7 +24,7 @@ export default function Home() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   /* =========================
-     SAFE LOAD / SAVE (SSR SAFE)
+     SAFE LOAD / SAVE
      ========================= */
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function Home() {
   }, [campaigns]);
 
   /* =========================
-     AUTO NAVIGATION (SAFE)
+     AUTO NAVIGATION
      ========================= */
 
   useEffect(() => {
@@ -80,7 +80,6 @@ export default function Home() {
           New Adventure
         </button>
 
-        {/* CONFIRM DELETE OVERLAY */}
         {confirmDelete && (
           <div style={styles.confirmOverlay}>
             <div style={styles.confirmBox}>
@@ -123,16 +122,14 @@ export default function Home() {
   }
 
   /* =========================
-     DERIVED STATE (MEMOIZED)
+     DERIVED (SAFE)
      ========================= */
-
-  const p = current.player;
 
   const status = useMemo(() => {
     const load = current.inventory.reduce((s, i) => s + i.weight, 0);
-    const cap = p.str * 15;
+    const cap = current.player.str * 15;
     return { load, cap };
-  }, [current, p.str]);
+  }, [current]);
 
   /* =========================
      GAME
@@ -141,7 +138,7 @@ export default function Home() {
   return (
     <main style={styles.game}>
       <div style={styles.status}>
-        HP {p.hp}/{p.maxHp} • Gold {current.gold} •
+        HP {current.player.hp}/{current.player.maxHp} • Gold {current.gold} •
         Load {status.load}/{status.cap}
       </div>
 
@@ -170,20 +167,6 @@ export default function Home() {
 
       <button
         style={styles.subtle}
-        onClick={() => exportLog("narrative")}
-      >
-        Download Narrative
-      </button>
-
-      <button
-        style={styles.subtle}
-        onClick={() => exportLog("raw")}
-      >
-        Download Raw Log
-      </button>
-
-      <button
-        style={styles.subtle}
         onClick={() => {
           setCurrent(null);
           setScreen("menu");
@@ -195,7 +178,7 @@ export default function Home() {
   );
 
   /* =========================
-     ACTION HANDLER
+     ACTION HANDLER (FIXED)
      ========================= */
 
   function act() {
@@ -212,10 +195,10 @@ export default function Home() {
       if (input === "attack") {
         const enemy = updated.enemies.find(e => e.alive);
         if (enemy) {
-          const atk = d20(mod(p.str));
+          const atk = d20(mod(prev.player.str));
           rulesOut.push(`[ATTACK] ${atk.total}`);
           if (atk.total >= 12) {
-            const dmg = roll(8) + mod(p.str);
+            const dmg = roll(8) + mod(prev.player.str);
             enemy.hp -= dmg;
             log.push(`You hit for ${dmg}.`);
             if (enemy.hp <= 0) {
@@ -236,8 +219,8 @@ export default function Home() {
 
       if (input === "rest") {
         updated.player.hp = Math.min(
-          p.maxHp,
-          p.hp + roll(8)
+          prev.player.maxHp,
+          prev.player.hp + roll(8)
         );
         log.push("You rest uneasily.");
       }
@@ -250,7 +233,7 @@ export default function Home() {
   }
 
   /* =========================
-     HELPERS
+     NEW GAME
      ========================= */
 
   function newGame() {
@@ -273,19 +256,6 @@ export default function Home() {
     setCampaigns(cs => [...cs, c]);
     setCurrent(c);
   }
-
-  function exportLog(type) {
-    const text =
-      type === "narrative"
-        ? current.log.filter(l => !l.startsWith(">")).join("\n\n")
-        : current.log.join("\n");
-
-    const blob = new Blob([text], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${current.name}-${type}.txt`;
-    a.click();
-  }
 }
 
 /* =========================
@@ -293,78 +263,31 @@ export default function Home() {
    ========================= */
 
 const styles = {
-  container: {
-    background: "#000",
-    color: "#ddd",
-    minHeight: "100vh",
-    padding: 24
+  container: { background:"#000", color:"#ddd", minHeight:"100vh", padding:24 },
+  game:{ background:"#000", color:"#ddd", minHeight:"100vh", padding:16 },
+  button:{ width:"100%", padding:12, background:"#111", color:"#ddd", border:"1px solid #222" },
+  danger:{ background:"#400", color:"#fff", border:"none", padding:12 },
+  subtle:{ background:"none", color:"#666", border:"none", marginTop:8 },
+  input:{ width:"100%", padding:12, background:"#111", color:"#ddd" },
+  rules:{ fontFamily:"monospace", background:"#111", padding:8, marginBottom:8 },
+  log:{ whiteSpace:"pre-wrap", marginBottom:16 },
+  status:{ fontSize:12, color:"#aaa", marginBottom:8 },
+  row:{ display:"flex", gap:8, marginBottom:8 },
+  confirmOverlay:{
+    position:"fixed",
+    inset:0,
+    background:"rgba(0,0,0,0.85)",
+    display:"flex",
+    alignItems:"center",
+    justifyContent:"center",
+    zIndex:1000
   },
-  game: {
-    background: "#000",
-    color: "#ddd",
-    minHeight: "100vh",
-    padding: 16
-  },
-  button: {
-    width: "100%",
-    padding: 12,
-    background: "#111",
-    color: "#ddd",
-    border: "1px solid #222"
-  },
-  danger: {
-    background: "#400",
-    color: "#fff",
-    border: "none",
-    padding: 12
-  },
-  subtle: {
-    background: "none",
-    color: "#666",
-    border: "none",
-    marginTop: 8
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    background: "#111",
-    color: "#ddd"
-  },
-  rules: {
-    fontFamily: "monospace",
-    background: "#111",
-    padding: 8,
-    marginBottom: 8
-  },
-  log: {
-    whiteSpace: "pre-wrap",
-    marginBottom: 16
-  },
-  status: {
-    fontSize: 12,
-    color: "#aaa",
-    marginBottom: 8
-  },
-  row: {
-    display: "flex",
-    gap: 8,
-    marginBottom: 8
-  },
-  confirmOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.85)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000
-  },
-  confirmBox: {
-    background: "#111",
-    border: "1px solid #333",
-    padding: 20,
-    width: "90%",
-    maxWidth: 320,
-    textAlign: "center"
+  confirmBox:{
+    background:"#111",
+    border:"1px solid #333",
+    padding:20,
+    width:"90%",
+    maxWidth:320,
+    textAlign:"center"
   }
 };
