@@ -34,6 +34,9 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [rulesLog, setRulesLog] = useState([]);
 
+  /* -------------------------
+     UNIVERSE
+     ------------------------- */
   const [universe, setUniverse] = useState({
     name: "",
     description: "",
@@ -43,9 +46,8 @@ export default function Home() {
   });
 
   /* -------------------------
-     Persistence
+     PERSISTENCE
      ------------------------- */
-
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("campaigns") || "[]");
     setCampaigns(saved);
@@ -90,7 +92,7 @@ export default function Home() {
   }
 
   /* =========================
-     LOAD ADVENTURE
+     LOAD
      ========================= */
 
   if (screen === "load") {
@@ -119,66 +121,10 @@ export default function Home() {
   }
 
   /* =========================
-     UNIVERSE CHOICE
-     ========================= */
-
-  if (screen === "universeChoice") {
-    return (
-      <main style={styles.container}>
-        <h1 style={styles.title}>Choose a Universe</h1>
-
-        <button
-          style={styles.button}
-          onClick={() => {
-            setUniverse({
-              name: "",
-              description: "",
-              themes: "",
-              tone: "Dark",
-              ruleset: "Strict 5e"
-            });
-            setScreen("universe");
-          }}
-        >
-          Create New Universe
-        </button>
-
-        {campaigns.length > 0 && (
-          <button
-            style={styles.button}
-            onClick={() => {
-              const last = campaigns[campaigns.length - 1];
-              const campaign = {
-                id: `campaign-${Date.now()}`,
-                name: last.universe?.name || "New Adventure",
-                universe: last.universe,
-                lastPlayed: new Date().toISOString(),
-                log: [
-                  `Universe: ${last.universe?.name || "Unknown"}`,
-                  "A new story begins in a familiar world."
-                ]
-              };
-              setCampaigns([...campaigns, campaign]);
-              setCurrent(campaign);
-              setScreen("game");
-            }}
-          >
-            Use Existing Universe
-          </button>
-        )}
-
-        <button style={styles.subtle} onClick={() => setScreen("menu")}>
-          ← Back
-        </button>
-      </main>
-    );
-  }
-
-  /* =========================
      UNIVERSE CREATION
      ========================= */
 
-  if (screen === "universe") {
+  if (screen === "universeChoice") {
     return (
       <main style={styles.container}>
         <h1 style={styles.title}>Create Your Universe</h1>
@@ -192,7 +138,7 @@ export default function Home() {
 
         <textarea
           style={styles.textarea}
-          placeholder="Describe the world, its rules, dangers, and tone"
+          placeholder="Describe the world, its dangers, rules, and tone"
           value={universe.description}
           onChange={e => setUniverse({ ...universe, description: e.target.value })}
         />
@@ -206,23 +152,32 @@ export default function Home() {
 
         <button
           style={styles.button}
-          onClick={async () => {
-            const res = await fetch("/api/opening", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ universe })
-            });
-
-            const data = await res.json();
-
+          onClick={() => {
             const campaign = {
               id: `campaign-${Date.now()}`,
-              name: universe.name || "Untitled Universe",
+              name: universe.name || "Untitled World",
               universe,
               lastPlayed: new Date().toISOString(),
-              log: [
-                `Universe: ${universe.name || "Unnamed"}`,
-                data.opening || "A dark world stirs."
+              log: ["You enter a hostile world."],
+
+              // NEW: NPCs & Factions
+              npcs: [
+                {
+                  name: "Watcher in the Rain",
+                  faction: "Ashfall Survivors",
+                  attitude: 0,
+                  memory: [],
+                  alive: true
+                }
+              ],
+              factions: [
+                {
+                  name: "Ashfall Survivors",
+                  goal: "Endure at any cost",
+                  attitude: 0,
+                  influence: 1,
+                  memory: []
+                }
               ]
             };
 
@@ -233,16 +188,12 @@ export default function Home() {
         >
           Begin Adventure
         </button>
-
-        <button style={styles.subtle} onClick={() => setScreen("menu")}>
-          ← Cancel
-        </button>
       </main>
     );
   }
 
   /* =========================
-     GAME SCREEN (STRICT RULES)
+     GAME
      ========================= */
 
   return (
@@ -256,14 +207,14 @@ export default function Home() {
       )}
 
       <div style={styles.log}>
-        {current.log.map((line, i) => (
-          <div key={i}>{line}</div>
+        {current.log.map((l, i) => (
+          <div key={i}>{l}</div>
         ))}
       </div>
 
       <input
         style={styles.input}
-        placeholder="What do you do? (e.g. check dex stealth)"
+        placeholder="What do you do? (check dex stealth)"
         value={input}
         onChange={e => setInput(e.target.value)}
       />
@@ -275,25 +226,17 @@ export default function Home() {
 
           let newLog = [...current.log, `> ${input}`];
           let newRules = [];
+          let updatedNPCs = [...current.npcs];
+          let updatedFactions = [...current.factions];
 
-          if (input.toLowerCase().startsWith("check")) {
-            const parts = input.toLowerCase().split(" ");
-            const ability = parts[1];
-
-            const modifiers = {
-              str: 3,
-              dex: 4,
-              con: 2,
-              int: 1,
-              wis: 2,
-              cha: 0
-            };
-
+          if (input.startsWith("check")) {
+            const ability = input.split(" ")[1];
+            const mods = { str: 3, dex: 4, con: 2, int: 1, wis: 2, cha: 0 };
             const dc = 14;
 
             const result = resolveCheck({
               ability,
-              mod: modifiers[ability] || 0,
+              mod: mods[ability] || 0,
               dc
             });
 
@@ -303,26 +246,45 @@ export default function Home() {
               result.success ? "SUCCESS" : "FAILURE"
             ];
 
+            // MEMORY EFFECTS
+            updatedNPCs = updatedNPCs.map(npc => ({
+              ...npc,
+              attitude: npc.attitude + (result.success ? 1 : -1),
+              memory: [
+                ...npc.memory,
+                result.success ? "Player proved capable." : "Player failed under pressure."
+              ]
+            }));
+
+            updatedFactions = updatedFactions.map(f => ({
+              ...f,
+              attitude: f.attitude + (result.success ? 1 : -1),
+              memory: [
+                ...f.memory,
+                result.success
+                  ? "Player action benefited us."
+                  : "Player action harmed our position."
+              ]
+            }));
+
             newLog.push(
               result.success
-                ? "You succeed, but consequences linger."
-                : "You fail. The world advances regardless."
+                ? "Eyes follow you with new respect."
+                : "Whispers spread of your weakness."
             );
-          } else {
-            newLog.push("The Dungeon Master considers your action.");
           }
 
           const updated = {
             ...current,
             lastPlayed: new Date().toISOString(),
-            log: newLog
+            log: newLog,
+            npcs: updatedNPCs,
+            factions: updatedFactions
           };
 
           setCurrent(updated);
           setRulesLog(newRules);
-          setCampaigns(
-            campaigns.map(c => (c.id === updated.id ? updated : c))
-          );
+          setCampaigns(campaigns.map(c => (c.id === updated.id ? updated : c)));
           setInput("");
         }}
       >
