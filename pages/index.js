@@ -55,9 +55,7 @@ export default function Home() {
       const saved = JSON.parse(localStorage.getItem("adventures") || "[]");
       if (Array.isArray(saved)) {
         setAdventures(saved);
-        if (saved.length > 0) {
-          setActiveId(saved[saved.length - 1].id);
-        }
+        if (saved.length > 0) setActiveId(saved[saved.length - 1].id);
       }
     } catch {}
   }, []);
@@ -70,7 +68,7 @@ export default function Home() {
   const active = adventures.find(a => a.id === activeId) || null;
 
   /* =====================
-     TEXT TO SPEECH
+     TEXT TO SPEECH (SAFE)
      ===================== */
   function speak(text) {
     if (!ttsEnabled || !window.speechSynthesis || !text) return;
@@ -86,6 +84,13 @@ export default function Home() {
     window.speechSynthesis.speak(utter);
   }
 
+  /* ✅ SAFE EFFECT — MUST BE HERE */
+  useEffect(() => {
+    if (view === "game" && active && active.log.length > 0) {
+      speak(active.log[active.log.length - 1]);
+    }
+  }, [view, active, ttsEnabled, voiceGender]);
+
   /* =====================
      CORNER MENU
      ===================== */
@@ -94,10 +99,7 @@ export default function Home() {
       <div style={styles.menu}>
         <button type="button" onClick={() => setView("home")}>Home</button>
         <button type="button" onClick={() => setShowSettings(true)}>Settings</button>
-        <button
-          type="button"
-          onClick={() => (window.location.href = "about:blank")}
-        >
+        <button type="button" onClick={() => (window.location.href = "about:blank")}>
           Exit
         </button>
       </div>
@@ -112,12 +114,7 @@ export default function Home() {
       <Screen theme={THEMES.dark} textSize={textSize} font={font}>
         <h1>Mythweaver</h1>
 
-        {active && (
-          <Button onClick={() => setView("game")}>
-            Continue Last Adventure
-          </Button>
-        )}
-
+        {active && <Button onClick={() => setView("game")}>Continue Last Adventure</Button>}
         <Button onClick={() => setView("new")}>New Adventure</Button>
         <Button onClick={() => setView("load")}>Load Adventure</Button>
         <Button onClick={() => setView("manage")}>Manage Saves</Button>
@@ -171,11 +168,7 @@ export default function Home() {
         {customStep === 1 && (
           <>
             <p>Describe the fantasy world you want to explore.</p>
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              style={styles.textarea}
-            />
+            <textarea value={input} onChange={e => setInput(e.target.value)} style={styles.textarea} />
             <Button onClick={() => nextCustom("description")}>Continue</Button>
           </>
         )}
@@ -231,13 +224,10 @@ export default function Home() {
         {adventures.length === 0 && <p>No saved adventures.</p>}
 
         {adventures.map(a => (
-          <Button
-            key={a.id}
-            onClick={() => {
-              setActiveId(a.id);
-              setView("game");
-            }}
-          >
+          <Button key={a.id} onClick={() => {
+            setActiveId(a.id);
+            setView("game");
+          }}>
             {a.name}
           </Button>
         ))}
@@ -282,18 +272,12 @@ export default function Home() {
      GAME
      ===================== */
   if (view === "game" && active) {
-    useEffect(() => {
-      speak(active.log[active.log.length - 1]);
-    }, [active.log]);
-
     return (
       <Screen theme={THEMES.dark} textSize={textSize} font={font}>
         <CornerMenu />
         <h2>{active.name}</h2>
 
-        {active.log.map((l, i) => (
-          <div key={i}>{l}</div>
-        ))}
+        {active.log.map((l, i) => <div key={i}>{l}</div>)}
 
         <Button onClick={attack}>Attack</Button>
 
@@ -332,10 +316,7 @@ Danger: ${u.danger || "Not specified"}.
       id: `adv-${Date.now()}`,
       name: "A Custom Realm",
       theme: "dark",
-      log: [
-        description,
-        "Your journey begins at the edge of the unknown."
-      ]
+      log: [description, "Your journey begins at the edge of the unknown."]
     };
 
     setAdventures(prev => [...prev, adv]);
