@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 /* =========================
-   ENGINE (PURE FUNCTIONS)
+   ENGINE
    ========================= */
 
 const mod = s => Math.floor((s - 10) / 2);
@@ -24,7 +24,7 @@ export default function Home() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   /* =========================
-     SAFE LOAD / SAVE
+     LOAD / SAVE (SAFE)
      ========================= */
 
   useEffect(() => {
@@ -84,10 +84,6 @@ export default function Home() {
           <div style={styles.confirmOverlay}>
             <div style={styles.confirmBox}>
               <p>Delete this adventure?</p>
-              <p style={{ fontSize: 12, color: "#999" }}>
-                This action cannot be undone.
-              </p>
-
               <button
                 style={styles.danger}
                 onClick={() => {
@@ -99,7 +95,6 @@ export default function Home() {
               >
                 Yes, Delete
               </button>
-
               <button
                 style={styles.subtle}
                 onClick={() => setConfirmDelete(null)}
@@ -113,23 +108,29 @@ export default function Home() {
     );
   }
 
-  /* =========================
-     GUARD
-     ========================= */
-
   if (!current) {
     return <main style={styles.container}>Loading…</main>;
   }
 
   /* =========================
-     DERIVED (SAFE)
+     NORMALIZED STATE (KEY FIX)
      ========================= */
 
+  const safeCurrent = {
+    log: [],
+    inventory: [],
+    enemies: [],
+    gold: 0,
+    ...current
+  };
+
+  const p = safeCurrent.player;
+
   const status = useMemo(() => {
-    const load = current.inventory.reduce((s, i) => s + i.weight, 0);
-    const cap = current.player.str * 15;
+    const load = safeCurrent.inventory.reduce((s, i) => s + i.weight, 0);
+    const cap = p.str * 15;
     return { load, cap };
-  }, [current]);
+  }, [safeCurrent, p.str]);
 
   /* =========================
      GAME
@@ -138,7 +139,7 @@ export default function Home() {
   return (
     <main style={styles.game}>
       <div style={styles.status}>
-        HP {current.player.hp}/{current.player.maxHp} • Gold {current.gold} •
+        HP {p.hp}/{p.maxHp} • Gold {safeCurrent.gold} •
         Load {status.load}/{status.cap}
       </div>
 
@@ -149,7 +150,7 @@ export default function Home() {
       )}
 
       <div style={styles.log}>
-        {current.log.slice(-40).map((l, i) => (
+        {safeCurrent.log.slice(-40).map((l, i) => (
           <div key={i}>{l}</div>
         ))}
       </div>
@@ -178,27 +179,33 @@ export default function Home() {
   );
 
   /* =========================
-     ACTION HANDLER (FIXED)
+     ACTION HANDLER
      ========================= */
 
   function act() {
     if (!input) return;
 
     setCurrent(prev => {
-      const log = [...prev.log, `> ${input}`];
-      const rulesOut = [];
+      const safePrev = {
+        log: [],
+        inventory: [],
+        enemies: [],
+        gold: 0,
+        ...prev
+      };
+
+      const log = [...safePrev.log, `> ${input}`];
       const updated = {
-        ...prev,
-        enemies: prev.enemies.map(e => ({ ...e }))
+        ...safePrev,
+        enemies: safePrev.enemies.map(e => ({ ...e }))
       };
 
       if (input === "attack") {
         const enemy = updated.enemies.find(e => e.alive);
         if (enemy) {
-          const atk = d20(mod(prev.player.str));
-          rulesOut.push(`[ATTACK] ${atk.total}`);
+          const atk = d20(mod(safePrev.player.str));
           if (atk.total >= 12) {
-            const dmg = roll(8) + mod(prev.player.str);
+            const dmg = roll(8) + mod(safePrev.player.str);
             enemy.hp -= dmg;
             log.push(`You hit for ${dmg}.`);
             if (enemy.hp <= 0) {
@@ -219,14 +226,13 @@ export default function Home() {
 
       if (input === "rest") {
         updated.player.hp = Math.min(
-          prev.player.maxHp,
-          prev.player.hp + roll(8)
+          safePrev.player.maxHp,
+          safePrev.player.hp + roll(8)
         );
         log.push("You rest uneasily.");
       }
 
       updated.log = log;
-      setRules(rulesOut);
       setInput("");
       return updated;
     });
@@ -263,7 +269,7 @@ export default function Home() {
    ========================= */
 
 const styles = {
-  container: { background:"#000", color:"#ddd", minHeight:"100vh", padding:24 },
+  container:{ background:"#000", color:"#ddd", minHeight:"100vh", padding:24 },
   game:{ background:"#000", color:"#ddd", minHeight:"100vh", padding:16 },
   button:{ width:"100%", padding:12, background:"#111", color:"#ddd", border:"1px solid #222" },
   danger:{ background:"#400", color:"#fff", border:"none", padding:12 },
