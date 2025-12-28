@@ -1,27 +1,24 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-/* =====================================================
-   ENGINE (PURE, FAST, NO SIDE EFFECTS)
-   ===================================================== */
+/* =======================
+   ENGINE (PURE FUNCTIONS)
+   ======================= */
 
-const mod = s => (s - 10) >> 1;
-const roll = d => (Math.random() * d | 0) + 1;
-const d20 = m => {
-  const r = roll(20);
-  return { roll: r, total: r + m };
-};
+const mod = s => Math.floor((s - 10) / 2);
+const roll = d => Math.floor(Math.random() * d) + 1;
+const d20 = m => ({ roll: roll(20), total: roll(20) + m });
 
-const narrate = ctx => {
+function narrate(ctx) {
   if (ctx.enemyDown) return "The body falls. Silence follows.";
   if (ctx.lowHp) return "Pain sharpens every breath.";
   if (ctx.exhausted) return "Your limbs feel leaden.";
   if (ctx.success) return "You gain ground, briefly.";
   return "The world resists you.";
-};
+}
 
-/* =====================================================
+/* =======================
    APP
-   ===================================================== */
+   ======================= */
 
 export default function Home() {
   const [screen, setScreen] = useState("menu");
@@ -30,33 +27,26 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [rulesLog, setRulesLog] = useState([]);
 
-  /* ----------------- LOAD / SAVE ----------------- */
-
+  /* ---------- SAFE LOAD ---------- */
   useEffect(() => {
-    setCampaigns(JSON.parse(localStorage.getItem("campaigns") || "[]"));
+    if (typeof window !== "undefined") {
+      const saved = JSON.parse(
+        window.localStorage.getItem("campaigns") || "[]"
+      );
+      setCampaigns(saved);
+    }
   }, []);
 
+  /* ---------- SAFE SAVE ---------- */
   useEffect(() => {
-    localStorage.setItem("campaigns", JSON.stringify(campaigns));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("campaigns", JSON.stringify(campaigns));
+    }
   }, [campaigns]);
 
-  /* ----------------- DERIVED (MEMOIZED) ----------------- */
-
-  const encumbrance = useMemo(() => {
-    if (!current) return null;
-    const load = current.inventory.reduce((s, i) => s + i.weight, 0);
-    const cap = current.player.str * 15;
-    return { load, cap, enc: load > cap };
-  }, [current]);
-
-  const exhaustionPenalty = useMemo(
-    () => current ? -2 * current.player.exhaustion : 0,
-    [current]
-  );
-
-  /* =====================================================
+  /* =======================
      MENU
-     ===================================================== */
+     ======================= */
 
   if (screen === "menu") {
     return (
@@ -92,27 +82,45 @@ export default function Home() {
     );
   }
 
-  /* =====================================================
-     GAME
-     ===================================================== */
+  /* =======================
+     GUARD AGAINST NULL
+     ======================= */
+
+  if (!current) {
+    return <main style={styles.container}>Loading...</main>;
+  }
+
+  /* =======================
+     DERIVED STATE
+     ======================= */
 
   const p = current.player;
+
+  const encumbrance = useMemo(() => {
+    const load = current.inventory.reduce((s, i) => s + i.weight, 0);
+    const cap = p.str * 15;
+    return { load, cap, enc: load > cap };
+  }, [current, p.str]);
+
+  /* =======================
+     GAME
+     ======================= */
 
   return (
     <main style={styles.game}>
       <div style={styles.status}>
         HP {p.hp}/{p.maxHp} • Gold {current.gold} •
-        Load {encumbrance.load}/{encumbrance.cap} •
-        Exh {p.exhaustion}
+        Load {encumbrance.load}/{encumbrance.cap}
       </div>
 
       {rulesLog.length > 0 && (
         <div style={styles.rules}>
-          {rulesLog.map((r, i) => <div key={i}>{r}</div>)}
+          {rulesLog.map((r, i) => (
+            <div key={i}>{r}</div>
+          ))}
         </div>
       )}
 
-      {/* Render only last 50 lines for speed */}
       <div style={styles.log}>
         {current.log.slice(-50).map((l, i) => (
           <div key={i}>{l}</div>
@@ -122,20 +130,12 @@ export default function Home() {
       <input
         style={styles.input}
         value={input}
-        placeholder="attack | cast | rest | loot"
+        placeholder="attack | rest | loot"
         onChange={e => setInput(e.target.value)}
       />
 
       <button style={styles.button} onClick={act}>
         Act
-      </button>
-
-      <button style={styles.subtle} onClick={() => exportLog("narrative")}>
-        Download Narrative
-      </button>
-
-      <button style={styles.subtle} onClick={() => exportLog("raw")}>
-        Download Raw Log
       </button>
 
       <button style={styles.subtle} onClick={() => setScreen("menu")}>
@@ -144,9 +144,9 @@ export default function Home() {
     </main>
   );
 
-  /* =====================================================
-     ACTION HANDLER (OPTIMIZED)
-     ===================================================== */
+  /* =======================
+     ACTION HANDLER
+     ======================= */
 
   function act() {
     if (!input) return;
@@ -156,18 +156,14 @@ export default function Home() {
       const rules = [];
       const updated = {
         ...prev,
-        log,
         enemies: prev.enemies.map(e => ({ ...e }))
       };
-
-      const penalty =
-        exhaustionPenalty + (encumbrance.enc ? -2 : 0);
 
       if (input === "attack") {
         for (const e of updated.enemies) {
           if (!e.alive) continue;
 
-          const atk = d20(mod(p.str) + penalty);
+          const atk = d20(mod(p.str));
           rules.push(`[ATTACK ${e.name}] ${atk.total}`);
 
           if (atk.total >= 12) {
@@ -182,7 +178,7 @@ export default function Home() {
           } else {
             log.push(`You miss ${e.name}.`);
           }
-          break; // one enemy per action (important optimization)
+          break;
         }
       }
 
@@ -197,19 +193,19 @@ export default function Home() {
           p.maxHp,
           p.hp + roll(8)
         );
-        if (encumbrance.enc) updated.player.exhaustion++;
-        log.push("You rest, uneasily.");
+        log.push("You rest uneasily.");
       }
 
+      updated.log = log;
       setRulesLog(rules);
       setInput("");
       return updated;
     });
   }
 
-  /* =====================================================
-     HELPERS
-     ===================================================== */
+  /* =======================
+     NEW GAME
+     ======================= */
 
   function newGame() {
     const c = {
@@ -219,9 +215,11 @@ export default function Home() {
       gold: 0,
       inventory: [],
       player: {
-        str: 14, dex: 14, con: 12,
-        hp: 12, maxHp: 12,
-        exhaustion: 0
+        str: 14,
+        dex: 14,
+        con: 12,
+        hp: 12,
+        maxHp: 12
       },
       enemies: [
         { name: "Bandit", hp: 8, alive: true },
@@ -233,24 +231,11 @@ export default function Home() {
     setCurrent(c);
     setScreen("game");
   }
-
-  function exportLog(type) {
-    const text =
-      type === "narrative"
-        ? current.log.filter(l => !l.startsWith(">")).join("\n\n")
-        : current.log.join("\n");
-
-    const blob = new Blob([text], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${current.name}-${type}.txt`;
-    a.click();
-  }
 }
 
-/* =====================================================
+/* =======================
    STYLES
-   ===================================================== */
+   ======================= */
 
 const styles = {
   container: { background:"#000", color:"#ddd", minHeight:"100vh", padding:24 },
