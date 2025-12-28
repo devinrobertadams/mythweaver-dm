@@ -35,10 +35,13 @@ export default function Home() {
   /* ---------- Custom Universe Builder ---------- */
   const [customStep, setCustomStep] = useState(0);
   const [customUniverse, setCustomUniverse] = useState({
+    description: "",
     tone: "",
     magic: "",
     danger: ""
   });
+
+  const [input, setInput] = useState("");
 
   /* ---------- LOAD ---------- */
   useEffect(() => {
@@ -105,8 +108,14 @@ export default function Home() {
 
         <Button
           onClick={() => {
-            setCustomUniverse({ tone: "", magic: "", danger: "" });
+            setCustomUniverse({
+              description: "",
+              tone: "",
+              magic: "",
+              danger: ""
+            });
             setCustomStep(1);
+            setInput("");
             setView("custom");
           }}
         >
@@ -121,7 +130,7 @@ export default function Home() {
   }
 
   /* =====================
-     CUSTOM UNIVERSE BUILDER
+     CUSTOM UNIVERSE (TEXT-DRIVEN)
      ===================== */
   if (view === "custom") {
     return (
@@ -130,32 +139,78 @@ export default function Home() {
 
         {customStep === 1 && (
           <>
-            <p>What is the tone of your world?</p>
-            <Button onClick={() => nextCustom("tone", "Hopeful")}>Hopeful</Button>
-            <Button onClick={() => nextCustom("tone", "Grim")}>Grim</Button>
-            <Button onClick={() => nextCustom("tone", "Bleak")}>Bleak</Button>
+            <p>
+              Describe the fantasy world you want to explore.
+            </p>
+
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Ancient ruins, fading magic, cruel gods..."
+              style={styles.textarea}
+            />
+
+            <Button onClick={() => nextCustom("description")}>
+              Continue
+            </Button>
           </>
         )}
 
         {customStep === 2 && (
           <>
-            <p>How does magic exist?</p>
-            <Button onClick={() => nextCustom("magic", "Common")}>Common</Button>
-            <Button onClick={() => nextCustom("magic", "Rare")}>Rare</Button>
-            <Button onClick={() => nextCustom("magic", "Forbidden")}>Forbidden</Button>
+            <p>
+              What is the overall tone of this world?
+            </p>
+
+            <InputRow value={input} setValue={setInput} />
+
+            <Button onClick={() => nextCustom("tone")}>
+              Continue
+            </Button>
+
+            <Button subtle onClick={() => skipCustom("tone")}>
+              Not Applicable
+            </Button>
           </>
         )}
 
         {customStep === 3 && (
           <>
-            <p>How dangerous is the world?</p>
-            <Button onClick={() => nextCustom("danger", "Perilous")}>Perilous</Button>
-            <Button onClick={() => nextCustom("danger", "Deadly")}>Deadly</Button>
-            <Button onClick={() => nextCustom("danger", "Apocalyptic")}>Apocalyptic</Button>
+            <p>
+              How does magic exist in this world?
+            </p>
+
+            <InputRow value={input} setValue={setInput} />
+
+            <Button onClick={() => nextCustom("magic")}>
+              Continue
+            </Button>
+
+            <Button subtle onClick={() => skipCustom("magic")}>
+              Not Applicable
+            </Button>
           </>
         )}
 
         {customStep === 4 && (
+          <>
+            <p>
+              How dangerous is this world?
+            </p>
+
+            <InputRow value={input} setValue={setInput} />
+
+            <Button onClick={() => nextCustom("danger")}>
+              Continue
+            </Button>
+
+            <Button subtle onClick={() => skipCustom("danger")}>
+              Not Applicable
+            </Button>
+          </>
+        )}
+
+        {customStep === 5 && (
           <>
             <p>Your universe takes shape…</p>
             <Button onClick={createCustomAdventure}>
@@ -163,10 +218,6 @@ export default function Home() {
             </Button>
           </>
         )}
-
-        <Button subtle onClick={() => setView("new")}>
-          Back
-        </Button>
       </Screen>
     );
   }
@@ -208,8 +259,6 @@ export default function Home() {
       <Screen theme={THEMES.dark}>
         <h2>Manage Saves</h2>
 
-        {adventures.length === 0 && <p>No saved adventures.</p>}
-
         {adventures.map(a => (
           <Button danger key={a.id} onClick={() => setConfirmDelete(a.id)}>
             Delete {a.name}
@@ -238,7 +287,7 @@ export default function Home() {
      GAME
      ===================== */
   if (view === "game" && active) {
-    const theme = THEMES[active.theme] || THEMES.dark;
+    const theme = THEMES.dark;
 
     return (
       <Screen theme={theme}>
@@ -266,26 +315,27 @@ export default function Home() {
   /* =====================
      LOGIC
      ===================== */
-  function createAdventure(themeKey, name) {
-    const adv = {
-      id: `adv-${Date.now()}`,
-      name,
-      theme: themeKey,
-      log: ["The world stirs as your journey begins."]
-    };
-
-    setAdventures(prev => [...prev, adv]);
-    setActiveId(adv.id);
-    setView("game");
+  function nextCustom(key) {
+    setCustomUniverse(prev => ({ ...prev, [key]: input }));
+    setInput("");
+    setCustomStep(s => s + 1);
   }
 
-  function nextCustom(key, value) {
-    setCustomUniverse(prev => ({ ...prev, [key]: value }));
+  function skipCustom(key) {
+    setCustomUniverse(prev => ({ ...prev, [key]: "Not applicable" }));
+    setInput("");
     setCustomStep(s => s + 1);
   }
 
   function createCustomAdventure() {
-    const description = `A ${customUniverse.tone.toLowerCase()} world where magic is ${customUniverse.magic.toLowerCase()} and danger is ${customUniverse.danger.toLowerCase()}.`;
+    const u = customUniverse;
+
+    const description = `
+${u.description || ""}
+Tone: ${u.tone || "Not specified"}.
+Magic: ${u.magic || "Not specified"}.
+Danger: ${u.danger || "Not specified"}.
+`.trim();
 
     const adv = {
       id: `adv-${Date.now()}`,
@@ -295,6 +345,19 @@ export default function Home() {
         description,
         "Your journey begins at the edge of the unknown."
       ]
+    };
+
+    setAdventures(prev => [...prev, adv]);
+    setActiveId(adv.id);
+    setView("game");
+  }
+
+  function createAdventure(themeKey, name) {
+    const adv = {
+      id: `adv-${Date.now()}`,
+      name,
+      theme: themeKey,
+      log: ["The world stirs as your journey begins."]
     };
 
     setAdventures(prev => [...prev, adv]);
@@ -364,17 +427,44 @@ function Button({ children, onClick, subtle, danger }) {
 
 function ConfirmDelete({ onConfirm, onCancel }) {
   return (
-    <div
-      style={{
-        background: "#111",
-        padding: 16,
-        marginTop: 16,
-        border: "1px solid #333"
-      }}
-    >
+    <div style={styles.confirm}>
       <p>This will permanently delete the save.</p>
       <Button danger onClick={onConfirm}>Confirm Delete</Button>
       <Button subtle onClick={onCancel}>Cancel</Button>
     </div>
   );
 }
+
+function InputRow({ value, setValue }) {
+  return (
+    <textarea
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      style={styles.textarea}
+      placeholder="Type your answer here..."
+    />
+  );
+}
+
+/* =====================
+   STYLES
+   ===================== */
+const styles = {
+  textarea: {
+    width: "100%",
+    minHeight: 90,
+    marginTop: 10,
+    padding: 10,
+    background: "#111",
+    color: "#eee",
+    border: "1px solid #333",
+    borderRadius: 6,
+    fontSize: 14
+  },
+  confirm: {
+    background: "#111",
+    padding: 16,
+    marginTop: 16,
+    border: "1px solid #333"
+  }
+};
