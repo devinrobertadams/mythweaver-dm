@@ -155,7 +155,7 @@ export default function Home() {
   const active = adventures.find(a => a.id === activeId);
 
   /* =====================
-     HOME (SETTINGS RESTORED)
+     HOME
      ===================== */
   if (view === "home") {
     return (
@@ -442,17 +442,6 @@ function Screen({ children, theme, fontFamily, fontSize }) {
   );
 }
 
-function CornerMenu({ onHome, onSettings }) {
-  return (
-    <div style={{ position: "absolute", top: 12, right: 12 }}>
-      <div style={styles.menu}>
-        <Button onClick={onHome}>Home</Button>
-        <Button onClick={onSettings}>Settings</Button>
-      </div>
-    </div>
-  );
-}
-
 function Button({ children, onClick, subtle }) {
   return (
     <button
@@ -469,6 +458,46 @@ function Button({ children, onClick, subtle }) {
     >
       {children}
     </button>
+  );
+}
+
+/* SMALL UTILITY BUTTONS FOR MENU */
+function MenuButton({ children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        padding: "6px 10px",
+        marginBottom: 6,
+        background: "#222",
+        color: "#fff",
+        border: "1px solid #333",
+        borderRadius: 4,
+        fontSize: 14,
+        textAlign: "left"
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CornerMenu({ onHome, onSettings }) {
+  return (
+    <div style={{
+      position: "absolute",
+      top: 12,
+      right: 12,
+      background: "#111",
+      padding: 8,
+      border: "1px solid #333",
+      borderRadius: 6,
+      width: 140
+    }}>
+      <MenuButton onClick={onHome}>Home</MenuButton>
+      <MenuButton onClick={onSettings}>Settings</MenuButton>
+    </div>
   );
 }
 
@@ -519,15 +548,9 @@ const styles = {
     border: "1px solid #333",
     borderRadius: 6
   },
-  menu: {
-    background: "#111",
-    padding: 10,
-    border: "1px solid #333",
-    borderRadius: 6
-  },
   settings: {
     background: "#111",
-    padding: 16,
+    padding: 12,
     marginTop: 16,
     border: "1px solid #333",
     borderRadius: 6
