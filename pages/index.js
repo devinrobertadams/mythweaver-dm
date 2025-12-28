@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
    ===================== */
 const rollDie = d => Math.floor(Math.random() * d) + 1;
 
-function groupInventory(items) {
+function groupInventory(items = []) {
   const groups = {};
   items.forEach(item => {
     const type = item.type || "Misc";
@@ -39,14 +39,14 @@ const THEMES = {
 /* =====================
    DM STAGING
    ===================== */
-function dmSetTheStage({ theme, lastAction, world, universe }) {
+function dmSetTheStage({ theme, lastAction, universe }) {
   const combat =
     lastAction && /attack|fight|strike|kill|charge/i.test(lastAction);
 
   const text = `
 ${theme === "lovecraftian"
   ? "Reality feels thin, watched by something vast."
-  : "The world responds to your decision."}
+  : "The world responds to your choice."}
 
 ${universe?.description || ""}
 
@@ -62,15 +62,19 @@ ${lastAction
    MAIN APP
    ===================== */
 export default function Home() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState("home"); // home | new | custom | load | game
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
+
+  const [campaignName, setCampaignName] = useState("");
+
+  const [customUniverse, setCustomUniverse] = useState({ description: "" });
+  const [customInput, setCustomInput] = useState("");
 
   const [panel, setPanel] = useState("log");
   const [mode, setMode] = useState("narrative");
   const [playerInput, setPlayerInput] = useState("");
 
-  /* MENU + SETTINGS */
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [textSize, setTextSize] = useState("medium");
@@ -92,7 +96,7 @@ export default function Home() {
     } catch {}
   }, []);
 
-  /* AUTO-SAVE (EVERY CHANGE) */
+  /* AUTO SAVE */
   useEffect(() => {
     localStorage.setItem("adventures", JSON.stringify(adventures));
   }, [adventures]);
@@ -122,21 +126,123 @@ export default function Home() {
   }
 
   /* =====================
-     GAME
+     NEW ADVENTURE
      ===================== */
-  if (view === "game" && active) {
-    const inventoryGroups = groupInventory(active.inventory || []);
-
+  if (view === "new") {
     return (
-      <Screen theme={THEMES[active.theme]} font={font} textSize={textSize}>
-        {/* CORNER MENU */}
+      <Screen theme={THEMES.dark} font={font} textSize={textSize}>
         <CornerMenu
           open={menuOpen}
           toggle={() => setMenuOpen(o => !o)}
-          onSave={() => {
-            localStorage.setItem("adventures", JSON.stringify(adventures));
-            setMenuOpen(false);
-          }}
+          onExit={() => setView("home")}
+        />
+
+        <h2>Name Your Campaign</h2>
+
+        <input
+          value={campaignName}
+          onChange={e => setCampaignName(e.target.value)}
+          placeholder="Campaign name"
+          style={styles.input}
+        />
+
+        {Object.entries(THEMES).map(([key, t]) => (
+          <Button
+            key={key}
+            onClick={() => {
+              if (!campaignName.trim()) return;
+              createAdventure(key);
+            }}
+          >
+            {t.name}
+          </Button>
+        ))}
+
+        <Button onClick={() => {
+          if (!campaignName.trim()) return;
+          setCustomInput("");
+          setView("custom");
+        }}>
+          Build Custom Campaign
+        </Button>
+
+        <Button subtle onClick={() => setView("home")}>Back</Button>
+      </Screen>
+    );
+  }
+
+  /* =====================
+     CUSTOM CAMPAIGN
+     ===================== */
+  if (view === "custom") {
+    return (
+      <Screen theme={THEMES.dark} font={font} textSize={textSize}>
+        <CornerMenu
+          open={menuOpen}
+          toggle={() => setMenuOpen(o => !o)}
+          onExit={() => setView("home")}
+        />
+
+        <h2>Describe Your World</h2>
+
+        <textarea
+          value={customInput}
+          onChange={e => setCustomInput(e.target.value)}
+          placeholder="Ancient ruins, cruel gods, fading magic..."
+          style={styles.textarea}
+        />
+
+        <Button onClick={createCustomAdventure}>Begin Campaign</Button>
+        <Button subtle onClick={() => setView("new")}>Back</Button>
+      </Screen>
+    );
+  }
+
+  /* =====================
+     LOAD
+     ===================== */
+  if (view === "load") {
+    return (
+      <Screen theme={THEMES.dark} font={font} textSize={textSize}>
+        <CornerMenu
+          open={menuOpen}
+          toggle={() => setMenuOpen(o => !o)}
+          onExit={() => setView("home")}
+        />
+
+        <h2>Load Adventure</h2>
+
+        {adventures.length === 0 && <p>No saved campaigns.</p>}
+
+        {adventures.map(a => (
+          <Button
+            key={a.id}
+            onClick={() => {
+              setActiveId(a.id);
+              setView("game");
+            }}
+          >
+            {a.name}
+          </Button>
+        ))}
+
+        <Button subtle onClick={() => setView("home")}>Back</Button>
+      </Screen>
+    );
+  }
+
+  /* =====================
+     GAME
+     ===================== */
+  if (view === "game" && active) {
+    const inventoryGroups = groupInventory(active.inventory);
+
+    return (
+      <Screen theme={THEMES[active.theme]} font={font} textSize={textSize}>
+        <CornerMenu
+          open={menuOpen}
+          toggle={() => setMenuOpen(o => !o)}
+          onSave={() => localStorage.setItem("adventures", JSON.stringify(adventures))}
           onHome={() => setView("home")}
           onSettings={() => setShowSettings(true)}
           onExit={() => setView("home")}
@@ -144,14 +250,11 @@ export default function Home() {
 
         <h2>{active.name}</h2>
 
-        {/* PANEL SWITCHER */}
         <div style={{ display: "flex", gap: 6 }}>
           <Button onClick={() => setPanel("log")}>Story</Button>
-          <Button onClick={() => setPanel("character")}>Character</Button>
           <Button onClick={() => setPanel("inventory")}>Inventory</Button>
         </div>
 
-        {/* STORY PANEL */}
         {panel === "log" && (
           <>
             {active.log.map((l, i) => <p key={i}>{l}</p>)}
@@ -167,24 +270,21 @@ export default function Home() {
           </>
         )}
 
-        {/* INVENTORY PANEL (SORTED BY TYPE) */}
         {panel === "inventory" && (
           <>
-            {Object.keys(inventoryGroups).length === 0 && <p>Inventory is empty.</p>}
+            {Object.keys(inventoryGroups).length === 0 && <p>Inventory empty.</p>}
             {Object.entries(inventoryGroups).map(([type, items]) => (
               <div key={type}>
                 <h4>{type}</h4>
                 <ul>
-                  {items.map((name, i) => <li key={i}>{name}</li>)}
+                  {items.map((n, i) => <li key={i}>{n}</li>)}
                 </ul>
               </div>
             ))}
           </>
         )}
 
-        {/* COMBAT */}
         {mode === "combat" && <Button onClick={attack}>Attack</Button>}
-
         {showSettings && <Settings />}
       </Screen>
     );
@@ -195,13 +295,49 @@ export default function Home() {
   /* =====================
      LOGIC
      ===================== */
+  function createAdventure(themeKey) {
+    const opening = dmSetTheStage({ theme: themeKey });
+
+    const adv = {
+      id: `adv-${Date.now()}`,
+      name: campaignName,
+      theme: themeKey,
+      universe: null,
+      log: [opening.text],
+      inventory: []
+    };
+
+    setAdventures(prev => [...prev, adv]);
+    setActiveId(adv.id);
+    setMode(opening.mode);
+    setView("game");
+  }
+
+  function createCustomAdventure() {
+    const universe = { description: customInput };
+    const opening = dmSetTheStage({ theme: "dark", universe });
+
+    const adv = {
+      id: `adv-${Date.now()}`,
+      name: campaignName,
+      theme: "dark",
+      universe,
+      log: [opening.text],
+      inventory: []
+    };
+
+    setAdventures(prev => [...prev, adv]);
+    setActiveId(adv.id);
+    setMode(opening.mode);
+    setView("game");
+  }
+
   function handleAction() {
     if (!playerInput.trim()) return;
 
     const dm = dmSetTheStage({
       theme: active.theme,
       lastAction: playerInput,
-      world: active.world,
       universe: active.universe
     });
 
@@ -277,9 +413,9 @@ function CornerMenu({ open, toggle, onSave, onHome, onSettings, onExit }) {
       <button onClick={toggle}>☰</button>
       {open && (
         <div style={styles.menu}>
-          <Button onClick={onSave}>Manual Save</Button>
-          <Button onClick={onHome}>Return Home</Button>
-          <Button onClick={onSettings}>Settings</Button>
+          {onSave && <Button onClick={onSave}>Manual Save</Button>}
+          {onHome && <Button onClick={onHome}>Home</Button>}
+          {onSettings && <Button onClick={onSettings}>Settings</Button>}
           <Button onClick={onExit}>Exit Game</Button>
         </div>
       )}
@@ -315,6 +451,15 @@ const styles = {
     minHeight: 80,
     padding: 10,
     marginTop: 8,
+    background: "#111",
+    color: "#eee",
+    border: "1px solid #333",
+    borderRadius: 6
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    marginBottom: 12,
     background: "#111",
     color: "#eee",
     border: "1px solid #333",
