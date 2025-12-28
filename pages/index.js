@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /* =========================
-   D&D 5e STRICT RULES CORE
+   D&D 5e CORE UTILITIES
    ========================= */
 
 function rollDie(sides) {
@@ -13,14 +13,8 @@ function rollD20(mod = 0) {
   return { roll, mod, total: roll + mod };
 }
 
-function resolveCheck({ ability, mod, dc }) {
-  const result = rollD20(mod);
-  return {
-    ...result,
-    dc,
-    success: result.total >= dc,
-    ability
-  };
+function rollDamage(dice, mod = 0) {
+  return rollDie(dice) + mod;
 }
 
 /* =========================
@@ -35,18 +29,7 @@ export default function Home() {
   const [rulesLog, setRulesLog] = useState([]);
 
   /* -------------------------
-     UNIVERSE
-     ------------------------- */
-  const [universe, setUniverse] = useState({
-    name: "",
-    description: "",
-    themes: "",
-    tone: "Dark",
-    ruleset: "Strict 5e"
-  });
-
-  /* -------------------------
-     PERSISTENCE
+     Persistence
      ------------------------- */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("campaigns") || "[]");
@@ -82,7 +65,7 @@ export default function Home() {
           Load Adventure
         </button>
 
-        <button style={styles.button} onClick={() => setScreen("universeChoice")}>
+        <button style={styles.button} onClick={() => setScreen("new")}>
           New Adventure
         </button>
 
@@ -121,64 +104,39 @@ export default function Home() {
   }
 
   /* =========================
-     UNIVERSE CREATION
+     NEW ADVENTURE
      ========================= */
 
-  if (screen === "universeChoice") {
+  if (screen === "new") {
     return (
       <main style={styles.container}>
-        <h1 style={styles.title}>Create Your Universe</h1>
-
-        <input
-          style={styles.input}
-          placeholder="Universe Name"
-          value={universe.name}
-          onChange={e => setUniverse({ ...universe, name: e.target.value })}
-        />
-
-        <textarea
-          style={styles.textarea}
-          placeholder="Describe the world, its dangers, rules, and tone"
-          value={universe.description}
-          onChange={e => setUniverse({ ...universe, description: e.target.value })}
-        />
-
-        <input
-          style={styles.input}
-          placeholder="Themes (decay, survival, forbidden magic...)"
-          value={universe.themes}
-          onChange={e => setUniverse({ ...universe, themes: e.target.value })}
-        />
+        <h1 style={styles.title}>A Hostile Road Awaits</h1>
 
         <button
           style={styles.button}
           onClick={() => {
             const campaign = {
               id: `campaign-${Date.now()}`,
-              name: universe.name || "Untitled World",
-              universe,
-              lastPlayed: new Date().toISOString(),
-              log: ["You enter a hostile world."],
+              name: "Ashfall Road",
+              log: ["Cold rain falls. Something moves in the dark."],
 
-              // NEW: NPCs & Factions
-              npcs: [
-                {
-                  name: "Watcher in the Rain",
-                  faction: "Ashfall Survivors",
-                  attitude: 0,
-                  memory: [],
-                  alive: true
-                }
-              ],
-              factions: [
-                {
-                  name: "Ashfall Survivors",
-                  goal: "Endure at any cost",
-                  attitude: 0,
-                  influence: 1,
-                  memory: []
-                }
-              ]
+              // PLAYER
+              player: {
+                hp: 12,
+                maxHp: 12,
+                deathFails: 0,
+                alive: true
+              },
+
+              // ENEMY
+              enemy: {
+                name: "Roadside Bandit",
+                hp: 8,
+                maxHp: 8,
+                alive: true
+              },
+
+              combat: null
             };
 
             setCampaigns([...campaigns, campaign]);
@@ -186,7 +144,7 @@ export default function Home() {
             setScreen("game");
           }}
         >
-          Begin Adventure
+          Begin
         </button>
       </main>
     );
@@ -195,6 +153,8 @@ export default function Home() {
   /* =========================
      GAME
      ========================= */
+
+  const inCombat = current.combat !== null;
 
   return (
     <main style={styles.game}>
@@ -212,90 +172,120 @@ export default function Home() {
         ))}
       </div>
 
-      <input
-        style={styles.input}
-        placeholder="What do you do? (check dex stealth)"
-        value={input}
-        onChange={e => setInput(e.target.value)}
-      />
+      {current.player.alive ? (
+        <>
+          <input
+            style={styles.input}
+            placeholder={inCombat ? "attack" : "What do you do?"}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+          />
 
-      <button
-        style={styles.button}
-        onClick={() => {
-          if (!input) return;
-
-          let newLog = [...current.log, `> ${input}`];
-          let newRules = [];
-          let updatedNPCs = [...current.npcs];
-          let updatedFactions = [...current.factions];
-
-          if (input.startsWith("check")) {
-            const ability = input.split(" ")[1];
-            const mods = { str: 3, dex: 4, con: 2, int: 1, wis: 2, cha: 0 };
-            const dc = 14;
-
-            const result = resolveCheck({
-              ability,
-              mod: mods[ability] || 0,
-              dc
-            });
-
-            newRules = [
-              `[${ability.toUpperCase()} CHECK]`,
-              `Roll: ${result.roll} + ${result.mod} = ${result.total} vs DC ${dc}`,
-              result.success ? "SUCCESS" : "FAILURE"
-            ];
-
-            // MEMORY EFFECTS
-            updatedNPCs = updatedNPCs.map(npc => ({
-              ...npc,
-              attitude: npc.attitude + (result.success ? 1 : -1),
-              memory: [
-                ...npc.memory,
-                result.success ? "Player proved capable." : "Player failed under pressure."
-              ]
-            }));
-
-            updatedFactions = updatedFactions.map(f => ({
-              ...f,
-              attitude: f.attitude + (result.success ? 1 : -1),
-              memory: [
-                ...f.memory,
-                result.success
-                  ? "Player action benefited us."
-                  : "Player action harmed our position."
-              ]
-            }));
-
-            newLog.push(
-              result.success
-                ? "Eyes follow you with new respect."
-                : "Whispers spread of your weakness."
-            );
-          }
-
-          const updated = {
-            ...current,
-            lastPlayed: new Date().toISOString(),
-            log: newLog,
-            npcs: updatedNPCs,
-            factions: updatedFactions
-          };
-
-          setCurrent(updated);
-          setRulesLog(newRules);
-          setCampaigns(campaigns.map(c => (c.id === updated.id ? updated : c)));
-          setInput("");
-        }}
-      >
-        Act
-      </button>
+          <button
+            style={styles.button}
+            onClick={() => handleAction()}
+          >
+            Act
+          </button>
+        </>
+      ) : (
+        <div style={styles.dead}>You are dead.</div>
+      )}
 
       <button style={styles.subtle} onClick={() => setScreen("menu")}>
         Save & Exit
       </button>
     </main>
   );
+
+  /* =========================
+     ACTION HANDLER
+     ========================= */
+
+  function handleAction() {
+    if (!input) return;
+
+    let newLog = [...current.log, `> ${input}`];
+    let newRules = [];
+    let updated = { ...current };
+
+    // START COMBAT
+    if (input === "attack" && !current.combat) {
+      const playerInit = rollD20(2);
+      const enemyInit = rollD20(1);
+
+      updated.combat = {
+        turn: playerInit.total >= enemyInit.total ? "player" : "enemy"
+      };
+
+      newRules.push(
+        `[INITIATIVE]`,
+        `You: ${playerInit.total} | Enemy: ${enemyInit.total}`
+      );
+
+      newLog.push("Steel is drawn.");
+    }
+
+    // PLAYER TURN
+    else if (input === "attack" && current.combat?.turn === "player") {
+      const attack = rollD20(4);
+      newRules.push(
+        `[ATTACK] Roll: ${attack.roll} + 4 = ${attack.total}`
+      );
+
+      if (attack.total >= 12) {
+        const dmg = rollDamage(8, 2);
+        updated.enemy.hp -= dmg;
+        newRules.push(`Hit! Damage: ${dmg}`);
+        newLog.push(`You wound the ${updated.enemy.name}.`);
+
+        if (updated.enemy.hp <= 0) {
+          updated.enemy.alive = false;
+          updated.combat = null;
+          newLog.push("Your enemy collapses. Combat ends.");
+        }
+      } else {
+        newLog.push("Your attack misses.");
+      }
+
+      updated.combat && (updated.combat.turn = "enemy");
+    }
+
+    // ENEMY TURN
+    else if (current.combat?.turn === "enemy") {
+      const attack = rollD20(3);
+      newRules.push(
+        `[ENEMY ATTACK] Roll: ${attack.roll} + 3 = ${attack.total}`
+      );
+
+      if (attack.total >= 12) {
+        const dmg = rollDamage(6, 1);
+        updated.player.hp -= dmg;
+        newLog.push(`You are hit for ${dmg} damage.`);
+
+        if (updated.player.hp <= 0) {
+          updated.player.deathFails += 1;
+          newLog.push("You fall, bleeding.");
+
+          if (updated.player.deathFails >= 3) {
+            updated.player.alive = false;
+            newLog.push("You bleed out. The world moves on.");
+            updated.combat = null;
+          }
+        }
+      } else {
+        newLog.push("The enemy misses.");
+      }
+
+      updated.combat && (updated.combat.turn = "player");
+    }
+
+    updated.log = newLog;
+    setCurrent(updated);
+    setRulesLog(newRules);
+    setCampaigns(campaigns.map(c => (c.id === updated.id ? updated : c)));
+    setInput("");
+  }
 }
 
 /* =========================
@@ -348,8 +338,7 @@ const styles = {
     padding: 12,
     marginBottom: 12,
     fontFamily: "monospace",
-    fontSize: 13,
-    color: "#bbb"
+    fontSize: 13
   },
   input: {
     width: "100%",
@@ -358,12 +347,9 @@ const styles = {
     color: "#ddd",
     border: "1px solid #222"
   },
-  textarea: {
-    width: "100%",
-    minHeight: 120,
-    padding: 12,
-    background: "#111",
-    color: "#ddd",
-    border: "1px solid #222"
+  dead: {
+    color: "#900",
+    fontWeight: "bold",
+    marginTop: 20
   }
 };
