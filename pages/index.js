@@ -26,6 +26,34 @@ const THEMES = {
   }
 };
 
+/* =====================
+   AI DM STAGE SETTER
+   ===================== */
+function dmSetTheStage({ theme, lastAction, universe }) {
+  const tone =
+    theme === "lovecraftian"
+      ? "An unseen presence presses against your thoughts."
+      : theme === "high"
+      ? "Hope and danger intertwine in equal measure."
+      : "The shadows deepen, watching silently.";
+
+  const response = lastAction
+    ? `In response to your action — "${lastAction}" — the world shifts.`
+    : "The world stirs, awaiting your first decision.";
+
+  const flavor = universe?.description
+    ? `This realm bears the mark of your vision: ${universe.description}`
+    : "";
+
+  return `
+${tone}
+${flavor}
+${response}
+
+Something has changed. What happens next will matter.
+`.trim();
+}
+
 export default function Home() {
   const [view, setView] = useState("home");
   const [adventures, setAdventures] = useState([]);
@@ -48,6 +76,7 @@ export default function Home() {
     danger: ""
   });
   const [input, setInput] = useState("");
+  const [playerInput, setPlayerInput] = useState("");
 
   /* ---------- LOAD ---------- */
   useEffect(() => {
@@ -84,7 +113,6 @@ export default function Home() {
     window.speechSynthesis.speak(utter);
   }
 
-  /* ✅ SAFE EFFECT — MUST BE HERE */
   useEffect(() => {
     if (view === "game" && active && active.log.length > 0) {
       speak(active.log[active.log.length - 1]);
@@ -279,6 +307,40 @@ export default function Home() {
 
         {active.log.map((l, i) => <div key={i}>{l}</div>)}
 
+        <div style={{ marginTop: 20 }}>
+          <p><strong>What do you do next?</strong></p>
+          <textarea
+            value={playerInput}
+            onChange={e => setPlayerInput(e.target.value)}
+            style={styles.textarea}
+          />
+
+          <Button
+            onClick={() => {
+              if (!playerInput.trim()) return;
+
+              const dmResponse = dmSetTheStage({
+                theme: active.theme,
+                lastAction: playerInput,
+                universe: customUniverse
+              });
+
+              const updated = {
+                ...active,
+                log: [...active.log, `You: ${playerInput}`, dmResponse]
+              };
+
+              setAdventures(adventures.map(a =>
+                a.id === active.id ? updated : a
+              ));
+
+              setPlayerInput("");
+            }}
+          >
+            Continue
+          </Button>
+        </div>
+
         <Button onClick={attack}>Attack</Button>
 
         {showSettings && <Settings />}
@@ -304,19 +366,17 @@ export default function Home() {
   }
 
   function createCustomAdventure() {
-    const u = customUniverse;
-    const description = `
-${u.description || ""}
-Tone: ${u.tone || "Not specified"}.
-Magic: ${u.magic || "Not specified"}.
-Danger: ${u.danger || "Not specified"}.
-`.trim();
+    const opening = dmSetTheStage({
+      theme: "dark",
+      lastAction: null,
+      universe: customUniverse
+    });
 
     const adv = {
       id: `adv-${Date.now()}`,
       name: "A Custom Realm",
       theme: "dark",
-      log: [description, "Your journey begins at the edge of the unknown."]
+      log: [opening]
     };
 
     setAdventures(prev => [...prev, adv]);
@@ -325,11 +385,12 @@ Danger: ${u.danger || "Not specified"}.
   }
 
   function createAdventure(themeKey, name) {
+    const opening = dmSetTheStage({ theme: themeKey });
     const adv = {
       id: `adv-${Date.now()}`,
       name,
       theme: themeKey,
-      log: ["The world stirs as your journey begins."]
+      log: [opening]
     };
     setAdventures(prev => [...prev, adv]);
     setActiveId(adv.id);
@@ -340,16 +401,27 @@ Danger: ${u.danger || "Not specified"}.
     const roll = rollDie(20);
     const dc = 12;
     const success = roll >= dc;
+
+    const dmResponse = dmSetTheStage({
+      theme: active.theme,
+      lastAction: success ? "a successful attack" : "a failed attack",
+      universe: customUniverse
+    });
+
     const updated = {
       ...active,
       log: [
         ...active.log,
         success
           ? `Attack succeeds (${roll} vs DC ${dc}).`
-          : `Attack fails (${roll} vs DC ${dc}).`
+          : `Attack fails (${roll} vs DC ${dc}).`,
+        dmResponse
       ]
     };
-    setAdventures(adventures.map(a => (a.id === active.id ? updated : a)));
+
+    setAdventures(adventures.map(a =>
+      a.id === active.id ? updated : a
+    ));
   }
 
   function Settings() {
