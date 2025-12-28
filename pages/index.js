@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 const rollDie = d => Math.floor(Math.random() * d) + 1;
 
 /* =====================
-   BASE THEMES
+   THEMES
    ===================== */
 const THEMES = {
   dark: {
@@ -27,69 +27,84 @@ const THEMES = {
 };
 
 /* =====================
-   AI DM STAGE SETTER
+   DM STAGING
    ===================== */
-function dmSetTheStage({ theme, lastAction, universe }) {
-  const tone =
-    theme === "lovecraftian"
-      ? "An unseen presence presses against your thoughts."
-      : theme === "high"
-      ? "Hope and danger intertwine in equal measure."
-      : "The shadows deepen, watching silently.";
+function dmSetTheStage({ theme, lastAction, world }) {
+  const combat =
+    lastAction && /attack|fight|strike|kill|charge/i.test(lastAction);
 
-  const response = lastAction
-    ? `In response to your action — "${lastAction}" — the world shifts.`
-    : "The world stirs, awaiting your first decision.";
+  const moralFlavor =
+    world.tension > 30
+      ? "The world trembles under mounting consequences."
+      : "The balance of this realm remains fragile.";
 
-  const flavor = universe?.description
-    ? `This realm bears the mark of your vision: ${universe.description}`
-    : "";
+  const text = `
+${theme === "lovecraftian"
+  ? "Reality feels thin, watched by something vast."
+  : "The world listens to your choice."}
 
-  return `
-${tone}
-${flavor}
-${response}
+${lastAction
+  ? `Because you chose to "${lastAction}", events begin to unfold.`
+  : "Your journey begins in uncertain silence."}
 
-Something has changed. What happens next will matter.
+${moralFlavor}
 `.trim();
+
+  return { text, mode: combat ? "combat" : "narrative" };
 }
 
+/* =====================
+   DECISION IMPACT
+   ===================== */
+function evaluateDecision(text) {
+  const result = {
+    alignment: 0,
+    influence: 0,
+    tension: 0,
+    trait: null
+  };
+
+  if (/help|save|protect|heal/i.test(text)) {
+    result.alignment += 10;
+    result.influence += 5;
+  }
+
+  if (/kill|steal|burn|threaten/i.test(text)) {
+    result.alignment -= 10;
+    result.tension += 5;
+    result.trait = "Feared";
+  }
+
+  if (/negotiate|persuade|convince/i.test(text)) {
+    result.influence += 10;
+  }
+
+  return result;
+}
+
+/* =====================
+   MAIN APP
+   ===================== */
 export default function Home() {
   const [view, setView] = useState("home");
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
 
-  /* ---------- SETTINGS ---------- */
-  const [showSettings, setShowSettings] = useState(false);
-  const [textSize, setTextSize] = useState("medium");
-  const [font, setFont] = useState("serif");
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [voiceGender, setVoiceGender] = useState("female");
-
-  /* ---------- CUSTOM UNIVERSE ---------- */
-  const [customStep, setCustomStep] = useState(0);
-  const [customUniverse, setCustomUniverse] = useState({
-    description: "",
-    tone: "",
-    magic: "",
-    danger: ""
-  });
-  const [input, setInput] = useState("");
+  const [mode, setMode] = useState("narrative");
+  const [panel, setPanel] = useState("log");
   const [playerInput, setPlayerInput] = useState("");
 
-  /* ---------- LOAD ---------- */
+  /* LOAD / SAVE */
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("adventures") || "[]");
       if (Array.isArray(saved)) {
         setAdventures(saved);
-        if (saved.length > 0) setActiveId(saved[saved.length - 1].id);
+        if (saved.length) setActiveId(saved[saved.length - 1].id);
       }
     } catch {}
   }, []);
 
-  /* ---------- SAVE ---------- */
   useEffect(() => {
     localStorage.setItem("adventures", JSON.stringify(adventures));
   }, [adventures]);
@@ -97,58 +112,16 @@ export default function Home() {
   const active = adventures.find(a => a.id === activeId) || null;
 
   /* =====================
-     TEXT TO SPEECH (SAFE)
-     ===================== */
-  function speak(text) {
-    if (!ttsEnabled || !window.speechSynthesis || !text) return;
-    const utter = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const match = voices.find(v =>
-      voiceGender === "female"
-        ? v.name.toLowerCase().includes("female")
-        : v.name.toLowerCase().includes("male")
-    );
-    if (match) utter.voice = match;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
-  }
-
-  useEffect(() => {
-    if (view === "game" && active && active.log.length > 0) {
-      speak(active.log[active.log.length - 1]);
-    }
-  }, [view, active, ttsEnabled, voiceGender]);
-
-  /* =====================
-     CORNER MENU
-     ===================== */
-  function CornerMenu() {
-    return (
-      <div style={styles.menu}>
-        <button type="button" onClick={() => setView("home")}>Home</button>
-        <button type="button" onClick={() => setShowSettings(true)}>Settings</button>
-        <button type="button" onClick={() => (window.location.href = "about:blank")}>
-          Exit
-        </button>
-      </div>
-    );
-  }
-
-  /* =====================
      HOME
      ===================== */
   if (view === "home") {
     return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+      <Screen theme={THEMES.dark}>
         <h1>Mythweaver</h1>
 
-        {active && <Button onClick={() => setView("game")}>Continue Last Adventure</Button>}
+        {active && <Button onClick={() => setView("game")}>Continue</Button>}
         <Button onClick={() => setView("new")}>New Adventure</Button>
         <Button onClick={() => setView("load")}>Load Adventure</Button>
-        <Button onClick={() => setView("manage")}>Manage Saves</Button>
-        <Button subtle onClick={() => setShowSettings(true)}>Settings</Button>
-
-        {showSettings && <Settings />}
       </Screen>
     );
   }
@@ -158,9 +131,8 @@ export default function Home() {
      ===================== */
   if (view === "new") {
     return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-        <CornerMenu />
-        <h2>Create New Adventure</h2>
+      <Screen theme={THEMES.dark}>
+        <h2>Create Adventure</h2>
 
         {Object.entries(THEMES).map(([key, t]) => (
           <Button key={key} onClick={() => createAdventure(key, t.name)}>
@@ -168,74 +140,7 @@ export default function Home() {
           </Button>
         ))}
 
-        <Button
-          onClick={() => {
-            setCustomUniverse({ description: "", tone: "", magic: "", danger: "" });
-            setCustomStep(1);
-            setInput("");
-            setView("custom");
-          }}
-        >
-          Build Custom Universe
-        </Button>
-
-        {showSettings && <Settings />}
-      </Screen>
-    );
-  }
-
-  /* =====================
-     CUSTOM UNIVERSE
-     ===================== */
-  if (view === "custom") {
-    return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-        <CornerMenu />
-        <h2>Design Your Universe</h2>
-
-        {customStep === 1 && (
-          <>
-            <p>Describe the fantasy world you want to explore.</p>
-            <textarea value={input} onChange={e => setInput(e.target.value)} style={styles.textarea} />
-            <Button onClick={() => nextCustom("description")}>Continue</Button>
-          </>
-        )}
-
-        {customStep === 2 && (
-          <>
-            <p>What is the overall tone of this world?</p>
-            <InputRow value={input} setValue={setInput} />
-            <Button onClick={() => nextCustom("tone")}>Continue</Button>
-            <Button subtle onClick={() => skipCustom("tone")}>Not Applicable</Button>
-          </>
-        )}
-
-        {customStep === 3 && (
-          <>
-            <p>How does magic exist in this world?</p>
-            <InputRow value={input} setValue={setInput} />
-            <Button onClick={() => nextCustom("magic")}>Continue</Button>
-            <Button subtle onClick={() => skipCustom("magic")}>Not Applicable</Button>
-          </>
-        )}
-
-        {customStep === 4 && (
-          <>
-            <p>How dangerous is this world?</p>
-            <InputRow value={input} setValue={setInput} />
-            <Button onClick={() => nextCustom("danger")}>Continue</Button>
-            <Button subtle onClick={() => skipCustom("danger")}>Not Applicable</Button>
-          </>
-        )}
-
-        {customStep === 5 && (
-          <>
-            <p>Your universe takes shape…</p>
-            <Button onClick={createCustomAdventure}>Begin Adventure</Button>
-          </>
-        )}
-
-        {showSettings && <Settings />}
+        <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
   }
@@ -245,11 +150,8 @@ export default function Home() {
      ===================== */
   if (view === "load") {
     return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-        <CornerMenu />
+      <Screen theme={THEMES.dark}>
         <h2>Load Adventure</h2>
-
-        {adventures.length === 0 && <p>No saved adventures.</p>}
 
         {adventures.map(a => (
           <Button key={a.id} onClick={() => {
@@ -260,38 +162,7 @@ export default function Home() {
           </Button>
         ))}
 
-        {showSettings && <Settings />}
-      </Screen>
-    );
-  }
-
-  /* =====================
-     MANAGE SAVES
-     ===================== */
-  if (view === "manage") {
-    return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-        <CornerMenu />
-        <h2>Manage Saves</h2>
-
-        {adventures.map(a => (
-          <Button danger key={a.id} onClick={() => setConfirmDelete(a.id)}>
-            Delete {a.name}
-          </Button>
-        ))}
-
-        {confirmDelete && (
-          <ConfirmDelete
-            onConfirm={() => {
-              setAdventures(adventures.filter(a => a.id !== confirmDelete));
-              if (confirmDelete === activeId) setActiveId(null);
-              setConfirmDelete(null);
-            }}
-            onCancel={() => setConfirmDelete(null)}
-          />
-        )}
-
-        {showSettings && <Settings />}
+        <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
   }
@@ -301,49 +172,57 @@ export default function Home() {
      ===================== */
   if (view === "game" && active) {
     return (
-      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-        <CornerMenu />
+      <Screen theme={THEMES[active.theme]}>
         <h2>{active.name}</h2>
 
-        {active.log.map((l, i) => <div key={i}>{l}</div>)}
-
-        <div style={{ marginTop: 20 }}>
-          <p><strong>What do you do next?</strong></p>
-          <textarea
-            value={playerInput}
-            onChange={e => setPlayerInput(e.target.value)}
-            style={styles.textarea}
-          />
-
-          <Button
-            onClick={() => {
-              if (!playerInput.trim()) return;
-
-              const dmResponse = dmSetTheStage({
-                theme: active.theme,
-                lastAction: playerInput,
-                universe: customUniverse
-              });
-
-              const updated = {
-                ...active,
-                log: [...active.log, `You: ${playerInput}`, dmResponse]
-              };
-
-              setAdventures(adventures.map(a =>
-                a.id === active.id ? updated : a
-              ));
-
-              setPlayerInput("");
-            }}
-          >
-            Continue
-          </Button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <Button onClick={() => setPanel("log")}>Story</Button>
+          <Button onClick={() => setPanel("character")}>Character</Button>
+          <Button onClick={() => setPanel("inventory")}>Inventory</Button>
         </div>
 
-        <Button onClick={attack}>Attack</Button>
+        {panel === "log" && (
+          <>
+            {active.log.map((l, i) => <p key={i}>{l}</p>)}
 
-        {showSettings && <Settings />}
+            <p><strong>What do you do next?</strong></p>
+            <textarea
+              value={playerInput}
+              onChange={e => setPlayerInput(e.target.value)}
+              style={styles.textarea}
+            />
+
+            <Button onClick={handleAction}>Continue</Button>
+          </>
+        )}
+
+        {panel === "character" && (
+          <>
+            <p>Level: {active.character.level}</p>
+            <p>XP: {active.character.xp}</p>
+            <p>HP: {active.character.hp}/{active.character.maxHp}</p>
+            <p>Alignment: {active.character.alignment}</p>
+            <p>Influence: {active.character.influence}</p>
+
+            {active.character.traits.length > 0 && (
+              <ul>
+                {active.character.traits.map((t, i) => <li key={i}>{t}</li>)}
+              </ul>
+            )}
+          </>
+        )}
+
+        {panel === "inventory" && (
+          <ul>
+            {active.inventory.length === 0
+              ? <li>Empty</li>
+              : active.inventory.map((i, idx) => <li key={idx}>{i}</li>)}
+          </ul>
+        )}
+
+        {mode === "combat" && <Button onClick={attack}>Attack</Button>}
+
+        <Button subtle onClick={() => setView("home")}>Save & Exit</Button>
       </Screen>
     );
   }
@@ -353,150 +232,118 @@ export default function Home() {
   /* =====================
      LOGIC
      ===================== */
-  function nextCustom(key) {
-    setCustomUniverse(prev => ({ ...prev, [key]: input }));
-    setInput("");
-    setCustomStep(s => s + 1);
-  }
-
-  function skipCustom(key) {
-    setCustomUniverse(prev => ({ ...prev, [key]: "Not applicable" }));
-    setInput("");
-    setCustomStep(s => s + 1);
-  }
-
-  function createCustomAdventure() {
-    const opening = dmSetTheStage({
-      theme: "dark",
-      lastAction: null,
-      universe: customUniverse
-    });
-
-    const adv = {
-      id: `adv-${Date.now()}`,
-      name: "A Custom Realm",
-      theme: "dark",
-      log: [opening]
-    };
-
-    setAdventures(prev => [...prev, adv]);
-    setActiveId(adv.id);
-    setView("game");
-  }
-
   function createAdventure(themeKey, name) {
-    const opening = dmSetTheStage({ theme: themeKey });
+    const world = { tension: 0, rumors: [] };
+
+    const opening = dmSetTheStage({ theme: themeKey, world });
+
     const adv = {
       id: `adv-${Date.now()}`,
       name,
       theme: themeKey,
-      log: [opening]
+      log: [opening.text],
+      world,
+      character: {
+        level: 1,
+        xp: 0,
+        hp: 10,
+        maxHp: 10,
+        alignment: 0,
+        influence: 0,
+        traits: []
+      },
+      inventory: []
     };
+
     setAdventures(prev => [...prev, adv]);
     setActiveId(adv.id);
+    setMode(opening.mode);
     setView("game");
   }
 
-  function attack() {
-    const roll = rollDie(20);
-    const dc = 12;
-    const success = roll >= dc;
+  function handleAction() {
+    if (!playerInput.trim()) return;
 
-    const dmResponse = dmSetTheStage({
+    const impact = evaluateDecision(playerInput);
+    const dm = dmSetTheStage({
       theme: active.theme,
-      lastAction: success ? "a successful attack" : "a failed attack",
-      universe: customUniverse
+      lastAction: playerInput,
+      world: active.world
     });
 
     const updated = {
       ...active,
+      character: {
+        ...active.character,
+        alignment: active.character.alignment + impact.alignment,
+        influence: active.character.influence + impact.influence,
+        traits: impact.trait
+          ? [...active.character.traits, impact.trait]
+          : active.character.traits
+      },
+      world: {
+        ...active.world,
+        tension: active.world.tension + impact.tension,
+        rumors: impact.trait
+          ? [...active.world.rumors, `You are known as ${impact.trait}`]
+          : active.world.rumors
+      },
+      log: [...active.log, `You: ${playerInput}`, dm.text]
+    };
+
+    setMode(dm.mode);
+    setPlayerInput("");
+    setAdventures(adventures.map(a => a.id === active.id ? updated : a));
+  }
+
+  function attack() {
+    const roll = rollDie(20);
+    const success = roll >= 12;
+
+    const updated = {
+      ...active,
+      character: {
+        ...active.character,
+        xp: active.character.xp + (success ? 20 : 5)
+      },
       log: [
         ...active.log,
-        success
-          ? `Attack succeeds (${roll} vs DC ${dc}).`
-          : `Attack fails (${roll} vs DC ${dc}).`,
-        dmResponse
+        success ? `You strike true (${roll}).` : `Your blow misses (${roll}).`
       ]
     };
 
-    setAdventures(adventures.map(a =>
-      a.id === active.id ? updated : a
-    ));
-  }
-
-  function Settings() {
-    return (
-      <div style={styles.settings}>
-        <h3>Settings</h3>
-
-        <label>Text Size</label>
-        <select value={textSize} onChange={e => setTextSize(e.target.value)}>
-          <option value="small">Small</option>
-          <option value="medium">Medium</option>
-          <option value="large">Large</option>
-        </select>
-
-        <label>Font</label>
-        <select value={font} onChange={e => setFont(e.target.value)}>
-          <option value="serif">Serif</option>
-          <option value="sans-serif">Sans</option>
-          <option value="monospace">Monospace</option>
-        </select>
-
-        <label>
-          <input
-            type="checkbox"
-            checked={ttsEnabled}
-            onChange={e => setTtsEnabled(e.target.checked)}
-          />
-          Enable Text to Audio
-        </label>
-
-        {ttsEnabled && (
-          <select value={voiceGender} onChange={e => setVoiceGender(e.target.value)}>
-            <option value="female">Female Voice</option>
-            <option value="male">Male Voice</option>
-          </select>
-        )}
-
-        <Button onClick={() => setShowSettings(false)}>Close</Button>
-      </div>
-    );
+    setMode("narrative");
+    setAdventures(adventures.map(a => a.id === active.id ? updated : a));
   }
 }
 
 /* =====================
-   UI COMPONENTS
+   UI
    ===================== */
-
-function Screen({ children, theme, textSize, font }) {
-  const sizes = { small: 14, medium: 16, large: 18 };
+function Screen({ children, theme }) {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: 24,
-        background: theme.bg,
-        color: "#eee",
-        fontFamily: font,
-        fontSize: sizes[textSize]
-      }}
-    >
+    <div style={{
+      minHeight: "100vh",
+      padding: 24,
+      background: theme.bg,
+      color: "#eee",
+      fontFamily: theme.font
+    }}>
       {children}
     </div>
   );
 }
 
-function Button({ children, onClick, subtle, danger }) {
+function Button({ children, onClick, subtle }) {
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
         width: "100%",
-        padding: 14,
-        marginTop: 10,
-        background: danger ? "#400" : subtle ? "transparent" : "#222",
+        padding: 12,
+        marginTop: 8,
+        background: subtle ? "transparent" : "#222",
         color: "#fff",
         border: subtle ? "1px solid #333" : "none",
         borderRadius: 6
@@ -507,58 +354,18 @@ function Button({ children, onClick, subtle, danger }) {
   );
 }
 
-function ConfirmDelete({ onConfirm, onCancel }) {
-  return (
-    <div style={styles.confirm}>
-      <p>This will permanently delete the save.</p>
-      <Button danger onClick={onConfirm}>Confirm Delete</Button>
-      <Button subtle onClick={onCancel}>Cancel</Button>
-    </div>
-  );
-}
-
-function InputRow({ value, setValue }) {
-  return (
-    <textarea
-      value={value}
-      onChange={e => setValue(e.target.value)}
-      style={styles.textarea}
-    />
-  );
-}
-
 /* =====================
    STYLES
    ===================== */
 const styles = {
   textarea: {
     width: "100%",
-    minHeight: 90,
-    marginTop: 10,
+    minHeight: 80,
     padding: 10,
+    marginTop: 8,
     background: "#111",
     color: "#eee",
     border: "1px solid #333",
-    borderRadius: 6,
-    fontSize: 14
-  },
-  confirm: {
-    background: "#111",
-    padding: 16,
-    marginTop: 16,
-    border: "1px solid #333"
-  },
-  settings: {
-    background: "#111",
-    padding: 16,
-    marginTop: 20,
-    border: "1px solid #333"
-  },
-  menu: {
-    position: "fixed",
-    top: 10,
-    right: 10,
-    display: "flex",
-    gap: 6
+    borderRadius: 6
   }
 };
