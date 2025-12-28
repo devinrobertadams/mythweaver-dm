@@ -1,29 +1,63 @@
 import { useEffect, useState } from "react";
 
-/* =========================
-   D&D 5e UTILITIES
-   ========================= */
+/* =========================================================
+   ENGINE MODULES (LOGIC-ONLY, CLEANLY SEPARATED)
+   ========================================================= */
 
-function mod(score) {
-  return Math.floor((score - 10) / 2);
+/* ---------- Dice & Math ---------- */
+const mod = s => Math.floor((s - 10) / 2);
+const roll = d => Math.floor(Math.random() * d) + 1;
+const d20 = m => {
+  const r = roll(20);
+  return { roll: r, total: r + m };
+};
+
+/* ---------- Encumbrance ---------- */
+function encumbrance(player, inventory) {
+  const capacity = player.str * 15;
+  const load = inventory.reduce((s, i) => s + i.weight, 0);
+  return { load, capacity, encumbered: load > capacity };
 }
 
-function rollDie(sides) {
-  return Math.floor(Math.random() * sides) + 1;
+/* ---------- Exhaustion ---------- */
+function exhaustionPenalty(level) {
+  return level > 0 ? -2 * level : 0;
 }
 
-function rollD20(modifier = 0) {
-  const roll = rollDie(20);
-  return { roll, modifier, total: roll + modifier };
+/* ---------- AI DM (LLM-READY STUB) ---------- */
+async function aiNarrate(context) {
+  // Replace this body with a real LLM call later
+  if (context.enemyDown) return "The last breath leaves the body. Silence spreads.";
+  if (context.lowHp) return "Pain narrows your vision. Survival feels uncertain.";
+  if (context.exhausted) return "Each movement feels heavier than the last.";
+  if (context.success) return "For now, fortune favors you.";
+  return "The world resists your will.";
 }
 
-function rollDamage(dice, modifier = 0) {
-  return rollDie(dice) + modifier;
+/* ---------- World Timeline ---------- */
+function advanceWorld(campaign) {
+  const time = campaign.timeline.turn + 1;
+  const events = [];
+
+  if (time % 3 === 0) {
+    events.push("A distant settlement falls silent.");
+  }
+  if (campaign.player.exhaustion >= 2) {
+    events.push("Rumors spread of a weakened traveler.");
+  }
+
+  return {
+    ...campaign,
+    timeline: {
+      turn: time,
+      events: [...campaign.timeline.events, ...events]
+    }
+  };
 }
 
-/* =========================
+/* =========================================================
    APP
-   ========================= */
+   ========================================================= */
 
 export default function Home() {
   const [screen, setScreen] = useState("menu");
@@ -32,167 +66,61 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [rulesLog, setRulesLog] = useState([]);
 
-  /* -------------------------
-     Persistence
-     ------------------------- */
+  /* ---------- Persistence ---------- */
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("campaigns") || "[]");
-    setCampaigns(saved);
+    setCampaigns(JSON.parse(localStorage.getItem("campaigns") || "[]"));
   }, []);
 
   useEffect(() => {
     localStorage.setItem("campaigns", JSON.stringify(campaigns));
   }, [campaigns]);
 
-  /* =========================
+  /* =========================================================
      MENU
-     ========================= */
+     ========================================================= */
 
   if (screen === "menu") {
     return (
       <main style={styles.container}>
-        <h1 style={styles.title}>MYTHWEAVER DM</h1>
+        <h1>MYTHWEAVER DM</h1>
 
-        {campaigns.length > 0 && (
-          <button style={styles.button} onClick={() => {
-            setCurrent(campaigns[0]);
-            setScreen("game");
-          }}>
-            Continue
-          </button>
-        )}
-
-        <button style={styles.button} onClick={() => setScreen("load")}>
-          Load Adventure
-        </button>
-
-        <button style={styles.button} onClick={() => setScreen("new")}>
-          New Adventure
-        </button>
-
-        <p style={styles.footer}>Solo • Dark • Strict 5e</p>
-      </main>
-    );
-  }
-
-  /* =========================
-     LOAD
-     ========================= */
-
-  if (screen === "load") {
-    return (
-      <main style={styles.container}>
-        <h1 style={styles.title}>Load Adventure</h1>
         {campaigns.map(c => (
-          <button key={c.id} style={styles.button} onClick={() => {
-            setCurrent(c);
-            setScreen("game");
-          }}>
-            {c.name}
-          </button>
-        ))}
-        <button style={styles.subtle} onClick={() => setScreen("menu")}>← Back</button>
-      </main>
-    );
-  }
-
-  /* =========================
-     NEW ADVENTURE + CHARACTER
-     ========================= */
-
-  if (screen === "new") {
-    return (
-      <main style={styles.container}>
-        <h1 style={styles.title}>Create Character</h1>
-
-        <button
-          style={styles.button}
-          onClick={() => {
-            const character = {
-              name: "Wanderer",
-              str: 14,
-              dex: 14,
-              con: 12,
-              int: 10,
-              wis: 10,
-              cha: 8,
-              hp: 10 + mod(12),
-              maxHp: 10 + mod(12),
-              deathFails: 0,
-              alive: true
-            };
-
-            const campaign = {
-              id: `campaign-${Date.now()}`,
-              name: "Ashfall Road",
-              log: ["Cold rain falls. Something watches from the dark."],
-              player: character,
-              enemy: {
-                name: "Roadside Bandit",
-                hp: 8,
-                alive: true
-              },
-              combat: null
-            };
-
-            setCampaigns([...campaigns, campaign]);
-            setCurrent(campaign);
-            setScreen("sheet");
-          }}
-        >
-          Create Character
-        </button>
-      </main>
-    );
-  }
-
-  /* =========================
-     CHARACTER SHEET
-     ========================= */
-
-  if (screen === "sheet") {
-    const p = current.player;
-    return (
-      <main style={styles.game}>
-        <h2>{p.name}</h2>
-
-        {["str","dex","con","int","wis","cha"].map(stat => (
-          <div key={stat} style={styles.statRow}>
-            <span>{stat.toUpperCase()}</span>
-            <input
-              type="number"
-              value={p[stat]}
-              onChange={e => {
-                const updated = {
-                  ...current,
-                  player: { ...p, [stat]: Number(e.target.value) }
-                };
-                setCurrent(updated);
-              }}
-            />
-            <span>mod {mod(p[stat])}</span>
+          <div key={c.id} style={styles.row}>
+            <button style={styles.button} onClick={() => {
+              setCurrent(c);
+              setScreen("game");
+            }}>
+              {c.name}
+            </button>
+            <button style={styles.danger} onClick={() => {
+              setCampaigns(campaigns.filter(x => x.id !== c.id));
+            }}>
+              ✕
+            </button>
           </div>
         ))}
 
-        <div>HP: {p.hp} / {p.maxHp}</div>
-
-        <button style={styles.button} onClick={() => setScreen("game")}>
-          Begin Adventure
+        <button style={styles.button} onClick={newGame}>
+          New Adventure
         </button>
       </main>
     );
   }
 
-  /* =========================
-     GAME + COMBAT
-     ========================= */
+  /* =========================================================
+     GAME
+     ========================================================= */
 
   const p = current.player;
-  const e = current.enemy;
-  const inCombat = current.combat !== null;
+  const enc = encumbrance(p, current.inventory);
 
   return (
     <main style={styles.game}>
+      <div style={styles.status}>
+        HP {p.hp}/{p.maxHp} • Gold {current.gold} • Load {enc.load}/{enc.capacity}
+        • Exhaustion {p.exhaustion}
+      </div>
+
       {rulesLog.length > 0 && (
         <div style={styles.rules}>
           {rulesLog.map((r,i) => <div key={i}>{r}</div>)}
@@ -203,20 +131,22 @@ export default function Home() {
         {current.log.map((l,i) => <div key={i}>{l}</div>)}
       </div>
 
-      {p.alive ? (
-        <>
-          <input
-            style={styles.input}
-            placeholder={inCombat ? "attack" : "What do you do?"}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-          />
+      <input
+        style={styles.input}
+        placeholder="attack | cast | rest | loot"
+        value={input}
+        onChange={e => setInput(e.target.value)}
+      />
 
-          <button style={styles.button} onClick={act}>Act</button>
-        </>
-      ) : (
-        <div style={styles.dead}>You are dead.</div>
-      )}
+      <button style={styles.button} onClick={act}>Act</button>
+
+      <button style={styles.subtle} onClick={() => exportLog("narrative")}>
+        Download Narrative
+      </button>
+
+      <button style={styles.subtle} onClick={() => exportLog("raw")}>
+        Download Raw Log
+      </button>
 
       <button style={styles.subtle} onClick={() => setScreen("menu")}>
         Save & Exit
@@ -224,125 +154,142 @@ export default function Home() {
     </main>
   );
 
-  /* =========================
+  /* =========================================================
      ACTION HANDLER
-     ========================= */
+     ========================================================= */
 
-  function act() {
+  async function act() {
     if (!input) return;
 
     let log = [...current.log, `> ${input}`];
     let rules = [];
     let updated = { ...current };
 
+    const penalty = exhaustionPenalty(p.exhaustion) + (enc.encumbered ? -2 : 0);
+
+    /* ---------- ATTACK (MULTI-ENEMY) ---------- */
     if (input === "attack") {
-      if (!updated.combat) {
-        const initP = rollD20(mod(p.dex));
-        const initE = rollD20(1);
-        updated.combat = { turn: initP.total >= initE.total ? "player" : "enemy" };
-        rules.push(`[INIT] You ${initP.total} | Enemy ${initE.total}`);
-        log.push("Combat begins.");
-      } else if (updated.combat.turn === "player") {
-        const atk = rollD20(mod(p.str));
-        rules.push(`[ATTACK] ${atk.total}`);
+      updated.enemies = updated.enemies.map(e => {
+        if (!e.alive) return e;
+
+        const atk = d20(mod(p.str) + penalty);
+        rules.push(`[ATTACK vs ${e.name}] ${atk.total}`);
+
         if (atk.total >= 12) {
-          const dmg = rollDamage(8, mod(p.str));
-          updated.enemy.hp -= dmg;
-          log.push(`You hit for ${dmg}.`);
-          if (updated.enemy.hp <= 0) {
-            log.push("Enemy dies.");
-            updated.combat = null;
+          const dmg = roll(8) + mod(p.str);
+          e.hp -= dmg;
+          log.push(`You strike ${e.name} for ${dmg}.`);
+
+          if (e.hp <= 0) {
+            e.alive = false;
+            log.push(await aiNarrate({ enemyDown: true }));
           }
         } else {
-          log.push("You miss.");
+          log.push(`Your blow misses ${e.name}.`);
         }
-        updated.combat && (updated.combat.turn = "enemy");
+        return e;
+      });
+    }
+
+    /* ---------- CAST ---------- */
+    if (input === "cast") {
+      if (p.spellSlots <= 0) {
+        log.push("No spell slots remain.");
       } else {
-        const atk = rollD20(2);
-        rules.push(`[ENEMY] ${atk.total}`);
-        if (atk.total >= 12) {
-          const dmg = rollDamage(6, 1);
-          updated.player.hp -= dmg;
-          log.push(`You take ${dmg}.`);
-          if (updated.player.hp <= 0) {
-            updated.player.deathFails += 1;
-            log.push("You are dying.");
-            if (updated.player.deathFails >= 3) {
-              updated.player.alive = false;
-              log.push("You bleed out.");
-              updated.combat = null;
-            }
-          }
+        updated.player.spellSlots--;
+        const spell = d20(mod(p.int) + penalty);
+        rules.push(`[SPELL] ${spell.total}`);
+
+        if (spell.total >= 12) {
+          const dmg = roll(10) + mod(p.int);
+          updated.enemies[0].hp -= dmg;
+          log.push(`Magic scorches flesh for ${dmg}.`);
         } else {
-          log.push("Enemy misses.");
+          log.push("The spell fails.");
         }
-        updated.combat && (updated.combat.turn = "player");
       }
     }
 
+    /* ---------- REST ---------- */
+    if (input === "rest") {
+      updated.player.hp = Math.min(p.maxHp, p.hp + roll(8));
+      if (enc.encumbered) updated.player.exhaustion++;
+      log.push("You rest, uneasily.");
+    }
+
+    /* ---------- LOOT ---------- */
+    if (input === "loot") {
+      updated.gold += roll(20);
+      updated.inventory.push({ name: "Salvage", weight: 2 });
+      log.push("You scavenge what remains.");
+    }
+
+    /* ---------- WORLD ADVANCE ---------- */
+    updated = advanceWorld(updated);
+
     updated.log = log;
-    setCurrent(updated);
     setRulesLog(rules);
+    setCurrent(updated);
     setCampaigns(campaigns.map(c => c.id === updated.id ? updated : c));
     setInput("");
   }
+
+  /* =========================================================
+     HELPERS
+     ========================================================= */
+
+  function newGame() {
+    const campaign = {
+      id: `c-${Date.now()}`,
+      name: "A Bleak Road",
+      log: ["Cold rain falls. The world does not wait."],
+      gold: 0,
+      inventory: [],
+      timeline: { turn: 0, events: [] },
+      player: {
+        str: 14, dex: 14, con: 12, int: 12,
+        hp: 12, maxHp: 12,
+        spellSlots: 2,
+        exhaustion: 0
+      },
+      enemies: [
+        { name: "Bandit", hp: 8, alive: true },
+        { name: "Scout", hp: 6, alive: true }
+      ]
+    };
+
+    setCampaigns([...campaigns, campaign]);
+    setCurrent(campaign);
+    setScreen("game");
+  }
+
+  function exportLog(type) {
+    const text =
+      type === "narrative"
+        ? current.log.filter(l => !l.startsWith(">")).join("\n\n")
+        : current.log.join("\n");
+
+    const blob = new Blob([text], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${current.name}-${type}.txt`;
+    a.click();
+  }
 }
 
-/* =========================
+/* =========================================================
    STYLES
-   ========================= */
+   ========================================================= */
 
 const styles = {
-  container: {
-    background:"#000",
-    color:"#ddd",
-    minHeight:"100vh",
-    padding:24,
-    display:"flex",
-    flexDirection:"column",
-    gap:16,
-    justifyContent:"center",
-    alignItems:"center"
-  },
-  title:{letterSpacing:2},
-  button:{
-    width:"100%",
-    padding:14,
-    background:"#111",
-    color:"#ddd",
-    border:"1px solid #222"
-  },
-  subtle:{
-    background:"none",
-    color:"#666",
-    border:"none"
-  },
-  footer:{fontSize:12,color:"#444"},
-  game:{
-    background:"#000",
-    color:"#ddd",
-    minHeight:"100vh",
-    padding:16
-  },
+  container:{background:"#000",color:"#ddd",minHeight:"100vh",padding:24},
+  game:{background:"#000",color:"#ddd",minHeight:"100vh",padding:16},
+  button:{width:"100%",padding:12,background:"#111",color:"#ddd",border:"1px solid #222"},
+  danger:{background:"#400",color:"#fff",border:"none",padding:12},
+  subtle:{background:"none",color:"#666",border:"none",marginTop:8},
+  input:{width:"100%",padding:12,background:"#111",color:"#ddd"},
+  rules:{fontFamily:"monospace",background:"#111",padding:8,marginBottom:8},
   log:{whiteSpace:"pre-wrap",marginBottom:16},
-  rules:{
-    background:"#0a0a0a",
-    border:"1px solid #222",
-    padding:12,
-    marginBottom:12,
-    fontFamily:"monospace"
-  },
-  input:{
-    width:"100%",
-    padding:12,
-    background:"#111",
-    color:"#ddd",
-    border:"1px solid #222"
-  },
-  statRow:{
-    display:"flex",
-    gap:8,
-    alignItems:"center"
-  },
-  dead:{color:"#900",fontWeight:"bold"}
+  status:{fontSize:12,color:"#aaa"},
+  row:{display:"flex",gap:8}
 };
