@@ -1,10 +1,38 @@
 import { useEffect, useState } from "react";
 
+/* =========================
+   D&D 5e STRICT RULES CORE
+   ========================= */
+
+function rollDie(sides) {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
+function rollD20(mod = 0) {
+  const roll = rollDie(20);
+  return { roll, mod, total: roll + mod };
+}
+
+function resolveCheck({ ability, mod, dc }) {
+  const result = rollD20(mod);
+  return {
+    ...result,
+    dc,
+    success: result.total >= dc,
+    ability
+  };
+}
+
+/* =========================
+   APP
+   ========================= */
+
 export default function Home() {
   const [screen, setScreen] = useState("menu");
   const [campaigns, setCampaigns] = useState([]);
   const [current, setCurrent] = useState(null);
   const [input, setInput] = useState("");
+  const [rulesLog, setRulesLog] = useState([]);
 
   const [universe, setUniverse] = useState({
     name: "",
@@ -14,9 +42,10 @@ export default function Home() {
     ruleset: "Strict 5e"
   });
 
-  // ---------------------
-  // Load / Save Campaigns
-  // ---------------------
+  /* -------------------------
+     Persistence
+     ------------------------- */
+
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("campaigns") || "[]");
     setCampaigns(saved);
@@ -26,9 +55,10 @@ export default function Home() {
     localStorage.setItem("campaigns", JSON.stringify(campaigns));
   }, [campaigns]);
 
-  // ---------------------
-  // MENU
-  // ---------------------
+  /* =========================
+     MENU
+     ========================= */
+
   if (screen === "menu") {
     return (
       <main style={styles.container}>
@@ -59,9 +89,10 @@ export default function Home() {
     );
   }
 
-  // ---------------------
-  // LOAD ADVENTURE
-  // ---------------------
+  /* =========================
+     LOAD ADVENTURE
+     ========================= */
+
   if (screen === "load") {
     return (
       <main style={styles.container}>
@@ -87,9 +118,10 @@ export default function Home() {
     );
   }
 
-  // ---------------------
-  // UNIVERSE CHOICE
-  // ---------------------
+  /* =========================
+     UNIVERSE CHOICE
+     ========================= */
+
   if (screen === "universeChoice") {
     return (
       <main style={styles.container}>
@@ -123,7 +155,7 @@ export default function Home() {
                 lastPlayed: new Date().toISOString(),
                 log: [
                   `Universe: ${last.universe?.name || "Unknown"}`,
-                  "A new journey begins in a familiar world."
+                  "A new story begins in a familiar world."
                 ]
               };
               setCampaigns([...campaigns, campaign]);
@@ -142,9 +174,10 @@ export default function Home() {
     );
   }
 
-  // ---------------------
-  // UNIVERSE CREATION
-  // ---------------------
+  /* =========================
+     UNIVERSE CREATION
+     ========================= */
+
   if (screen === "universe") {
     return (
       <main style={styles.container}>
@@ -208,11 +241,20 @@ export default function Home() {
     );
   }
 
-  // ---------------------
-  // GAME SCREEN
-  // ---------------------
+  /* =========================
+     GAME SCREEN (STRICT RULES)
+     ========================= */
+
   return (
     <main style={styles.game}>
+      {rulesLog.length > 0 && (
+        <div style={styles.rules}>
+          {rulesLog.map((r, i) => (
+            <div key={i}>{r}</div>
+          ))}
+        </div>
+      )}
+
       <div style={styles.log}>
         {current.log.map((line, i) => (
           <div key={i}>{line}</div>
@@ -221,7 +263,7 @@ export default function Home() {
 
       <input
         style={styles.input}
-        placeholder="What do you do?"
+        placeholder="What do you do? (e.g. check dex stealth)"
         value={input}
         onChange={e => setInput(e.target.value)}
       />
@@ -231,13 +273,53 @@ export default function Home() {
         onClick={() => {
           if (!input) return;
 
+          let newLog = [...current.log, `> ${input}`];
+          let newRules = [];
+
+          if (input.toLowerCase().startsWith("check")) {
+            const parts = input.toLowerCase().split(" ");
+            const ability = parts[1];
+
+            const modifiers = {
+              str: 3,
+              dex: 4,
+              con: 2,
+              int: 1,
+              wis: 2,
+              cha: 0
+            };
+
+            const dc = 14;
+
+            const result = resolveCheck({
+              ability,
+              mod: modifiers[ability] || 0,
+              dc
+            });
+
+            newRules = [
+              `[${ability.toUpperCase()} CHECK]`,
+              `Roll: ${result.roll} + ${result.mod} = ${result.total} vs DC ${dc}`,
+              result.success ? "SUCCESS" : "FAILURE"
+            ];
+
+            newLog.push(
+              result.success
+                ? "You succeed, but consequences linger."
+                : "You fail. The world advances regardless."
+            );
+          } else {
+            newLog.push("The Dungeon Master considers your action.");
+          }
+
           const updated = {
             ...current,
             lastPlayed: new Date().toISOString(),
-            log: [...current.log, `> ${input}`, "The world reacts..."]
+            log: newLog
           };
 
           setCurrent(updated);
+          setRulesLog(newRules);
           setCampaigns(
             campaigns.map(c => (c.id === updated.id ? updated : c))
           );
@@ -254,9 +336,10 @@ export default function Home() {
   );
 }
 
-// ---------------------
-// STYLES
-// ---------------------
+/* =========================
+   STYLES
+   ========================= */
+
 const styles = {
   container: {
     background: "#000",
@@ -269,9 +352,7 @@ const styles = {
     justifyContent: "center",
     alignItems: "center"
   },
-  title: {
-    letterSpacing: 2
-  },
+  title: { letterSpacing: 2 },
   button: {
     width: "100%",
     padding: 14,
@@ -298,6 +379,15 @@ const styles = {
   log: {
     whiteSpace: "pre-wrap",
     marginBottom: 16
+  },
+  rules: {
+    background: "#0a0a0a",
+    border: "1px solid #222",
+    padding: 12,
+    marginBottom: 12,
+    fontFamily: "monospace",
+    fontSize: 13,
+    color: "#bbb"
   },
   input: {
     width: "100%",
