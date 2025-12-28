@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 const rollDie = d => Math.floor(Math.random() * d) + 1;
 
 /* =====================
-   THEMES
+   BASE THEMES
    ===================== */
 const THEMES = {
   dark: {
@@ -19,18 +19,26 @@ const THEMES = {
     bg: "linear-gradient(#0b132b, #1c2541)",
     font: "serif"
   },
-  eldritch: {
-    name: "Eldritch Horror",
+  lovecraftian: {
+    name: "Lovecraftian Fantasy",
     bg: "linear-gradient(#020204, #0f1a14)",
     font: "monospace"
   }
 };
 
 export default function Home() {
-  const [view, setView] = useState("home"); // home | new | load | manage | game
+  const [view, setView] = useState("home"); 
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  /* ---------- Custom Universe Builder ---------- */
+  const [customStep, setCustomStep] = useState(0);
+  const [customUniverse, setCustomUniverse] = useState({
+    tone: "",
+    magic: "",
+    danger: ""
+  });
 
   /* ---------- LOAD ---------- */
   useEffect(() => {
@@ -90,13 +98,20 @@ export default function Home() {
         <h2>Create New Adventure</h2>
 
         {Object.entries(THEMES).map(([key, t]) => (
-          <Button
-            key={key}
-            onClick={() => createAdventure(key)}
-          >
-            New {t.name} Universe
+          <Button key={key} onClick={() => createAdventure(key, t.name)}>
+            {t.name}
           </Button>
         ))}
+
+        <Button
+          onClick={() => {
+            setCustomUniverse({ tone: "", magic: "", danger: "" });
+            setCustomStep(1);
+            setView("custom");
+          }}
+        >
+          Build Custom Universe
+        </Button>
 
         <Button subtle onClick={() => setView("home")}>
           Back
@@ -106,7 +121,54 @@ export default function Home() {
   }
 
   /* =====================
-     LOAD ADVENTURE
+     CUSTOM UNIVERSE BUILDER
+     ===================== */
+  if (view === "custom") {
+    return (
+      <Screen theme={THEMES.dark}>
+        <h2>Design Your Universe</h2>
+
+        {customStep === 1 && (
+          <>
+            <p>What is the tone of your world?</p>
+            <Button onClick={() => nextCustom("tone", "Hopeful")}>Hopeful</Button>
+            <Button onClick={() => nextCustom("tone", "Grim")}>Grim</Button>
+            <Button onClick={() => nextCustom("tone", "Bleak")}>Bleak</Button>
+          </>
+        )}
+
+        {customStep === 2 && (
+          <>
+            <p>How does magic exist?</p>
+            <Button onClick={() => nextCustom("magic", "Common")}>Common</Button>
+            <Button onClick={() => nextCustom("magic", "Rare")}>Rare</Button>
+            <Button onClick={() => nextCustom("magic", "Forbidden")}>Forbidden</Button>
+          </>
+        )}
+
+        {customStep === 3 && (
+          <>
+            <p>How dangerous is the world?</p>
+            <Button onClick={() => nextCustom("danger", "Perilous")}>Perilous</Button>
+            <Button onClick={() => nextCustom("danger", "Deadly")}>Deadly</Button>
+            <Button onClick={() => nextCustom("danger", "Apocalyptic")}>Apocalyptic</Button>
+          </>
+        )}
+
+        {customStep === 4 && (
+          <>
+            <p>Your universe takes shape…</p>
+            <Button onClick={createCustomAdventure}>
+              Begin Adventure
+            </Button>
+          </>
+        )}
+      </Screen>
+    );
+  }
+
+  /* =====================
+     LOAD
      ===================== */
   if (view === "load") {
     return (
@@ -142,14 +204,8 @@ export default function Home() {
       <Screen theme={THEMES.dark}>
         <h2>Manage Saves</h2>
 
-        {adventures.length === 0 && <p>No saved adventures.</p>}
-
         {adventures.map(a => (
-          <Button
-            danger
-            key={a.id}
-            onClick={() => setConfirmDelete(a.id)}
-          >
+          <Button danger key={a.id} onClick={() => setConfirmDelete(a.id)}>
             Delete {a.name}
           </Button>
         ))}
@@ -176,7 +232,7 @@ export default function Home() {
      GAME
      ===================== */
   if (view === "game" && active) {
-    const theme = THEMES[active.theme];
+    const theme = THEMES[active.theme] || THEMES.dark;
 
     return (
       <Screen theme={theme}>
@@ -204,12 +260,35 @@ export default function Home() {
   /* =====================
      LOGIC
      ===================== */
-  function createAdventure(theme) {
+  function createAdventure(themeKey, name) {
     const adv = {
       id: `adv-${Date.now()}`,
-      name: "A New Beginning",
-      theme,
+      name,
+      theme: themeKey,
       log: ["The world stirs as your journey begins."]
+    };
+
+    setAdventures(prev => [...prev, adv]);
+    setActiveId(adv.id);
+    setView("game");
+  }
+
+  function nextCustom(key, value) {
+    setCustomUniverse(prev => ({ ...prev, [key]: value }));
+    setCustomStep(s => s + 1);
+  }
+
+  function createCustomAdventure() {
+    const description = `A ${customUniverse.tone.toLowerCase()} world where magic is ${customUniverse.magic.toLowerCase()} and danger is ${customUniverse.danger.toLowerCase()}.`;
+
+    const adv = {
+      id: `adv-${Date.now()}`,
+      name: "A Custom Realm",
+      theme: "dark",
+      log: [
+        description,
+        "Your journey begins at the edge of the unknown."
+      ]
     };
 
     setAdventures(prev => [...prev, adv]);
