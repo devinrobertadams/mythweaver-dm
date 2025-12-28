@@ -55,9 +55,7 @@ export default function Home() {
       const saved = JSON.parse(localStorage.getItem("adventures") || "[]");
       if (Array.isArray(saved)) {
         setAdventures(saved);
-        if (saved.length > 0) {
-          setActiveId(saved[saved.length - 1].id);
-        }
+        if (saved.length > 0) setActiveId(saved[saved.length - 1].id);
       }
     } catch {}
   }, []);
@@ -121,6 +119,93 @@ export default function Home() {
   }
 
   /* =====================
+     NEW ADVENTURE
+     ===================== */
+  if (view === "new") {
+    return (
+      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+        <CornerMenu />
+        <h2>Create New Adventure</h2>
+
+        {Object.entries(THEMES).map(([key, t]) => (
+          <Button key={key} onClick={() => createAdventure(key, t.name)}>
+            {t.name}
+          </Button>
+        ))}
+
+        <Button
+          onClick={() => {
+            setCustomUniverse({ description: "", tone: "", magic: "", danger: "" });
+            setCustomStep(1);
+            setInput("");
+            setView("custom");
+          }}
+        >
+          Build Custom Universe
+        </Button>
+
+        {showSettings && <Settings />}
+      </Screen>
+    );
+  }
+
+  /* =====================
+     LOAD
+     ===================== */
+  if (view === "load") {
+    return (
+      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+        <CornerMenu />
+        <h2>Load Adventure</h2>
+
+        {adventures.length === 0 && <p>No saved adventures.</p>}
+
+        {adventures.map(a => (
+          <Button key={a.id} onClick={() => {
+            setActiveId(a.id);
+            setView("game");
+          }}>
+            {a.name}
+          </Button>
+        ))}
+
+        {showSettings && <Settings />}
+      </Screen>
+    );
+  }
+
+  /* =====================
+     MANAGE SAVES
+     ===================== */
+  if (view === "manage") {
+    return (
+      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+        <CornerMenu />
+        <h2>Manage Saves</h2>
+
+        {adventures.map(a => (
+          <Button danger key={a.id} onClick={() => setConfirmDelete(a.id)}>
+            Delete {a.name}
+          </Button>
+        ))}
+
+        {confirmDelete && (
+          <ConfirmDelete
+            onConfirm={() => {
+              setAdventures(adventures.filter(a => a.id !== confirmDelete));
+              if (confirmDelete === activeId) setActiveId(null);
+              setConfirmDelete(null);
+            }}
+            onCancel={() => setConfirmDelete(null)}
+          />
+        )}
+
+        {showSettings && <Settings />}
+      </Screen>
+    );
+  }
+
+  /* =====================
      GAME
      ===================== */
   if (view === "game" && active) {
@@ -132,35 +217,44 @@ export default function Home() {
       <Screen theme={THEMES.dark} textSize={textSize} font={font}>
         <CornerMenu />
         <h2>{active.name}</h2>
+
         {active.log.map((l, i) => <div key={i}>{l}</div>)}
+
         <Button onClick={attack}>Attack</Button>
+
+        {showSettings && <Settings />}
       </Screen>
     );
   }
 
-  /* =====================
-     FALLBACK PAGES
-     ===================== */
-  return (
-    <Screen theme={THEMES.dark} textSize={textSize} font={font}>
-      <CornerMenu />
-      <p>Menu option active.</p>
-      {showSettings && <Settings />}
-    </Screen>
-  );
+  return null;
 
   /* =====================
      LOGIC
      ===================== */
+  function createAdventure(themeKey, name) {
+    const adv = {
+      id: `adv-${Date.now()}`,
+      name,
+      theme: themeKey,
+      log: ["The world stirs as your journey begins."]
+    };
+    setAdventures(prev => [...prev, adv]);
+    setActiveId(adv.id);
+    setView("game");
+  }
+
   function attack() {
     const roll = rollDie(20);
     const dc = 12;
     const success = roll >= dc;
     const updated = {
       ...active,
-      log: [...active.log, success
-        ? `Attack succeeds (${roll} vs DC ${dc}).`
-        : `Attack fails (${roll} vs DC ${dc}).`]
+      log: [...active.log,
+        success
+          ? `Attack succeeds (${roll} vs DC ${dc}).`
+          : `Attack fails (${roll} vs DC ${dc}).`
+      ]
     };
     setAdventures(adventures.map(a => a.id === active.id ? updated : a));
   }
@@ -185,8 +279,11 @@ export default function Home() {
         </select>
 
         <label>
-          <input type="checkbox" checked={ttsEnabled}
-            onChange={e => setTtsEnabled(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={ttsEnabled}
+            onChange={e => setTtsEnabled(e.target.checked)}
+          />
           Enable Text to Audio
         </label>
 
@@ -210,32 +307,48 @@ export default function Home() {
 function Screen({ children, theme, textSize, font }) {
   const sizes = { small: 14, medium: 16, large: 18 };
   return (
-    <div style={{
-      minHeight: "100vh",
-      padding: 24,
-      background: theme.bg,
-      color: "#eee",
-      fontFamily: font,
-      fontSize: sizes[textSize]
-    }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: 24,
+        background: theme.bg,
+        color: "#eee",
+        fontFamily: font,
+        fontSize: sizes[textSize]
+      }}
+    >
       {children}
     </div>
   );
 }
 
-function Button({ children, onClick, subtle }) {
+function Button({ children, onClick, subtle, danger }) {
   return (
-    <button type="button" onClick={onClick} style={{
-      width: "100%",
-      padding: 14,
-      marginTop: 10,
-      background: subtle ? "transparent" : "#222",
-      color: "#fff",
-      border: subtle ? "1px solid #333" : "none",
-      borderRadius: 6
-    }}>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        padding: 14,
+        marginTop: 10,
+        background: danger ? "#400" : subtle ? "transparent" : "#222",
+        color: "#fff",
+        border: subtle ? "1px solid #333" : "none",
+        borderRadius: 6
+      }}
+    >
       {children}
     </button>
+  );
+}
+
+function ConfirmDelete({ onConfirm, onCancel }) {
+  return (
+    <div style={styles.confirm}>
+      <p>This will permanently delete the save.</p>
+      <Button danger onClick={onConfirm}>Confirm Delete</Button>
+      <Button subtle onClick={onCancel}>Cancel</Button>
+    </div>
   );
 }
 
@@ -254,6 +367,12 @@ const styles = {
     background: "#111",
     padding: 16,
     marginTop: 20,
+    border: "1px solid #333"
+  },
+  confirm: {
+    background: "#111",
+    padding: 16,
+    marginTop: 16,
     border: "1px solid #333"
   }
 };
