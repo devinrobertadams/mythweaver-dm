@@ -19,6 +19,11 @@ const THEMES = {
     bg: "linear-gradient(#050505, #120a0a)",
     font: "serif"
   },
+  high: {
+    name: "High Fantasy",
+    bg: "linear-gradient(#0b132b, #1c2541)",
+    font: "serif"
+  },
   lovecraftian: {
     name: "Lovecraftian Fantasy",
     bg: "linear-gradient(#020204, #0f1a14)",
@@ -38,18 +43,20 @@ function dmNarrate({ theme, universe, dmState }) {
     text =
       theme === "lovecraftian"
         ? "The world reveals itself slowly, distorted and watchful."
-        : "You take in your surroundings, sensing unresolved tension.";
+        : theme === "high"
+        ? "The land opens before you, rich with promise and peril."
+        : "You sense a place shaped by hardship and old scars.";
 
     if (universe?.description) text += "\n\n" + universe.description;
     nextBeat = "explore";
   } else if (dmState.lastBeat === "explore") {
-    text = "The moment lingers. Something waits for you to act.";
+    text = "The moment lingers. Something awaits your decision.";
     nextBeat = "consequence";
   } else if (dmState.lastBeat === "consequence") {
-    text = "Subtle consequences begin to surface.";
+    text = "The effects of earlier choices begin to surface.";
     nextBeat = "escalation";
   } else {
-    text = "Events accelerate, forcing a decision.";
+    text = "Events accelerate, forcing a decisive moment.";
     nextBeat = "explore";
     if (Math.random() < 0.3) mode = "combat";
   }
@@ -80,8 +87,8 @@ function dmHandleNPC({ intent, character }) {
   const npc = {
     disposition: 0,
     knows: {
-      public: "People here are uneasy, but tight-lipped.",
-      secret: "A cult gathers beneath the old chapel."
+      public: "The people here seem wary, unwilling to speak freely.",
+      secret: "A hidden group meets beneath the old chapel."
     }
   };
 
@@ -110,7 +117,7 @@ function dmHandleNPC({ intent, character }) {
    MAIN APP
    ===================== */
 export default function Home() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState("home"); // home | new | custom | load | game
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
@@ -164,11 +171,12 @@ export default function Home() {
         />
 
         <Button onClick={() => createAdventure("dark")}>Dark Fantasy</Button>
+        <Button onClick={() => createAdventure("high")}>High Fantasy</Button>
         <Button onClick={() => createAdventure("lovecraftian")}>
           Lovecraftian Fantasy
         </Button>
 
-        <Button onClick={() => setView("custom")}>Custom World</Button>
+        <Button onClick={() => setView("custom")}>Build Custom World</Button>
         <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
@@ -186,7 +194,7 @@ export default function Home() {
           placeholder="Describe your world…"
           style={styles.textarea}
         />
-        <Button onClick={createCustomAdventure}>Begin</Button>
+        <Button onClick={createCustomAdventure}>Begin Campaign</Button>
         <Button subtle onClick={() => setView("new")}>Back</Button>
       </Screen>
     );
@@ -247,6 +255,7 @@ export default function Home() {
             <p>Persuasion: {active.character.skills.persuasion}</p>
             <p>Deception: {active.character.skills.deception}</p>
             <p>Insight: {active.character.skills.insight}</p>
+            <p>Intimidation: {active.character.skills.intimidation}</p>
           </>
         )}
 
