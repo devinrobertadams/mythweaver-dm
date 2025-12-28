@@ -1,69 +1,47 @@
 import { useEffect, useState } from "react";
 
 export default function Home() {
-  const [screen, setScreen] = useState("menu"); // menu | load | game
+  const [screen, setScreen] = useState("menu");
   const [campaigns, setCampaigns] = useState([]);
   const [current, setCurrent] = useState(null);
   const [input, setInput] = useState("");
 
-  // Load campaigns
+  const [universe, setUniverse] = useState({
+    name: "",
+    description: "",
+    themes: "",
+    tone: "Dark",
+    ruleset: "Strict 5e"
+  });
+
+  // ---------------------
+  // Load / Save Campaigns
+  // ---------------------
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("campaigns") || "[]");
     setCampaigns(saved);
   }, []);
 
-  // Save campaigns
   useEffect(() => {
     localStorage.setItem("campaigns", JSON.stringify(campaigns));
   }, [campaigns]);
 
-  function startNewAdventure() {
-    const campaign = {
-      id: `campaign-${Date.now()}`,
-      name: "A New, Unwritten Road",
-      tone: "Dark",
-      ruleset: "5e-strict",
-      lastPlayed: new Date().toISOString(),
-      log: [
-        "Cold rain falls on an unfamiliar road.",
-        "You have chosen to walk it alone."
-      ]
-    };
-
-    setCampaigns([...campaigns, campaign]);
-    setCurrent(campaign);
-    setScreen("game");
-  }
-
-  function loadCampaign(c) {
-    setCurrent(c);
-    setScreen("game");
-  }
-
-  function send() {
-    if (!input) return;
-
-    const updated = {
-      ...current,
-      lastPlayed: new Date().toISOString(),
-      log: [...current.log, `> ${input}`, "The world listens..."]
-    };
-
-    setCurrent(updated);
-    setCampaigns(campaigns.map(c => (c.id === updated.id ? updated : c)));
-    setInput("");
-  }
-
-  // =================
-  // START MENU
-  // =================
+  // ---------------------
+  // MENU
+  // ---------------------
   if (screen === "menu") {
     return (
       <main style={styles.container}>
         <h1 style={styles.title}>MYTHWEAVER DM</h1>
 
         {campaigns.length > 0 && (
-          <button style={styles.button} onClick={() => loadCampaign(campaigns[0])}>
+          <button
+            style={styles.button}
+            onClick={() => {
+              setCurrent(campaigns[0]);
+              setScreen("game");
+            }}
+          >
             Continue Last Adventure
           </button>
         )}
@@ -72,25 +50,32 @@ export default function Home() {
           Load Adventure
         </button>
 
-        <button style={styles.button} onClick={startNewAdventure}>
+        <button style={styles.button} onClick={() => setScreen("universeChoice")}>
           New Adventure
         </button>
 
-        <p style={styles.footer}>Elarion • The Dying Century</p>
+        <p style={styles.footer}>Solo • Dark • Strict 5e</p>
       </main>
     );
   }
 
-  // =================
-  // LOAD SCREEN
-  // =================
+  // ---------------------
+  // LOAD ADVENTURE
+  // ---------------------
   if (screen === "load") {
     return (
       <main style={styles.container}>
         <h1 style={styles.title}>Load Adventure</h1>
 
         {campaigns.map(c => (
-          <button key={c.id} style={styles.button} onClick={() => loadCampaign(c)}>
+          <button
+            key={c.id}
+            style={styles.button}
+            onClick={() => {
+              setCurrent(c);
+              setScreen("game");
+            }}
+          >
             {c.name}
           </button>
         ))}
@@ -102,14 +87,135 @@ export default function Home() {
     );
   }
 
-  // =================
+  // ---------------------
+  // UNIVERSE CHOICE
+  // ---------------------
+  if (screen === "universeChoice") {
+    return (
+      <main style={styles.container}>
+        <h1 style={styles.title}>Choose a Universe</h1>
+
+        <button
+          style={styles.button}
+          onClick={() => {
+            setUniverse({
+              name: "",
+              description: "",
+              themes: "",
+              tone: "Dark",
+              ruleset: "Strict 5e"
+            });
+            setScreen("universe");
+          }}
+        >
+          Create New Universe
+        </button>
+
+        {campaigns.length > 0 && (
+          <button
+            style={styles.button}
+            onClick={() => {
+              const last = campaigns[campaigns.length - 1];
+              const campaign = {
+                id: `campaign-${Date.now()}`,
+                name: last.universe?.name || "New Adventure",
+                universe: last.universe,
+                lastPlayed: new Date().toISOString(),
+                log: [
+                  `Universe: ${last.universe?.name || "Unknown"}`,
+                  "A new journey begins in a familiar world."
+                ]
+              };
+              setCampaigns([...campaigns, campaign]);
+              setCurrent(campaign);
+              setScreen("game");
+            }}
+          >
+            Use Existing Universe
+          </button>
+        )}
+
+        <button style={styles.subtle} onClick={() => setScreen("menu")}>
+          ← Back
+        </button>
+      </main>
+    );
+  }
+
+  // ---------------------
+  // UNIVERSE CREATION
+  // ---------------------
+  if (screen === "universe") {
+    return (
+      <main style={styles.container}>
+        <h1 style={styles.title}>Create Your Universe</h1>
+
+        <input
+          style={styles.input}
+          placeholder="Universe Name"
+          value={universe.name}
+          onChange={e => setUniverse({ ...universe, name: e.target.value })}
+        />
+
+        <textarea
+          style={styles.textarea}
+          placeholder="Describe the world, its rules, dangers, and tone"
+          value={universe.description}
+          onChange={e => setUniverse({ ...universe, description: e.target.value })}
+        />
+
+        <input
+          style={styles.input}
+          placeholder="Themes (decay, survival, forbidden magic...)"
+          value={universe.themes}
+          onChange={e => setUniverse({ ...universe, themes: e.target.value })}
+        />
+
+        <button
+          style={styles.button}
+          onClick={async () => {
+            const res = await fetch("/api/opening", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ universe })
+            });
+
+            const data = await res.json();
+
+            const campaign = {
+              id: `campaign-${Date.now()}`,
+              name: universe.name || "Untitled Universe",
+              universe,
+              lastPlayed: new Date().toISOString(),
+              log: [
+                `Universe: ${universe.name || "Unnamed"}`,
+                data.opening || "A dark world stirs."
+              ]
+            };
+
+            setCampaigns([...campaigns, campaign]);
+            setCurrent(campaign);
+            setScreen("game");
+          }}
+        >
+          Begin Adventure
+        </button>
+
+        <button style={styles.subtle} onClick={() => setScreen("menu")}>
+          ← Cancel
+        </button>
+      </main>
+    );
+  }
+
+  // ---------------------
   // GAME SCREEN
-  // =================
+  // ---------------------
   return (
     <main style={styles.game}>
       <div style={styles.log}>
-        {current.log.map((l, i) => (
-          <div key={i}>{l}</div>
+        {current.log.map((line, i) => (
+          <div key={i}>{line}</div>
         ))}
       </div>
 
@@ -120,7 +226,24 @@ export default function Home() {
         onChange={e => setInput(e.target.value)}
       />
 
-      <button style={styles.button} onClick={send}>
+      <button
+        style={styles.button}
+        onClick={() => {
+          if (!input) return;
+
+          const updated = {
+            ...current,
+            lastPlayed: new Date().toISOString(),
+            log: [...current.log, `> ${input}`, "The world reacts..."]
+          };
+
+          setCurrent(updated);
+          setCampaigns(
+            campaigns.map(c => (c.id === updated.id ? updated : c))
+          );
+          setInput("");
+        }}
+      >
         Act
       </button>
 
@@ -131,6 +254,9 @@ export default function Home() {
   );
 }
 
+// ---------------------
+// STYLES
+// ---------------------
 const styles = {
   container: {
     background: "#000",
@@ -156,8 +282,7 @@ const styles = {
   subtle: {
     background: "none",
     color: "#666",
-    border: "none",
-    marginTop: 12
+    border: "none"
   },
   footer: {
     marginTop: 40,
@@ -177,7 +302,14 @@ const styles = {
   input: {
     width: "100%",
     padding: 12,
-    marginBottom: 8,
+    background: "#111",
+    color: "#ddd",
+    border: "1px solid #222"
+  },
+  textarea: {
+    width: "100%",
+    minHeight: 120,
+    padding: 12,
     background: "#111",
     color: "#ddd",
     border: "1px solid #222"
