@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 const rollDie = d => Math.floor(Math.random() * d) + 1;
 
 /* =====================
-   THEMES
+   BASE THEMES
    ===================== */
 const THEMES = {
   dark: {
@@ -26,17 +26,14 @@ const THEMES = {
   }
 };
 
-/* =====================
-   MAIN APP
-   ===================== */
 export default function Home() {
-  const [view, setView] = useState("home"); 
+  const [view, setView] = useState("home");
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   /* ---------- SETTINGS ---------- */
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [textSize, setTextSize] = useState("medium");
   const [font, setFont] = useState("serif");
   const [ttsEnabled, setTtsEnabled] = useState(false);
@@ -90,90 +87,65 @@ export default function Home() {
   }
 
   /* =====================
+     CORNER MENU
+     ===================== */
+  function CornerMenu() {
+    return (
+      <div style={styles.menu}>
+        <button type="button" onClick={() => setView("home")}>Home</button>
+        <button type="button" onClick={() => setShowSettings(true)}>Settings</button>
+        <button type="button" onClick={() => window.location.href = "about:blank"}>
+          Exit
+        </button>
+      </div>
+    );
+  }
+
+  /* =====================
      HOME
      ===================== */
   if (view === "home") {
     return (
-      <Screen settings={{ textSize, font }} theme={THEMES.dark}>
+      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
         <h1>Mythweaver</h1>
 
-        {active && (
-          <Button onClick={() => setView("game")}>
-            Continue Last Adventure
-          </Button>
-        )}
-
+        {active && <Button onClick={() => setView("game")}>Continue Last Adventure</Button>}
         <Button onClick={() => setView("new")}>New Adventure</Button>
         <Button onClick={() => setView("load")}>Load Adventure</Button>
         <Button onClick={() => setView("manage")}>Manage Saves</Button>
-        <Button subtle onClick={() => setSettingsOpen(true)}>Settings</Button>
+        <Button subtle onClick={() => setShowSettings(true)}>Settings</Button>
 
-        {settingsOpen && (
-          <Settings
-            close={() => setSettingsOpen(false)}
-            textSize={textSize}
-            setTextSize={setTextSize}
-            font={font}
-            setFont={setFont}
-            ttsEnabled={ttsEnabled}
-            setTtsEnabled={setTtsEnabled}
-            voiceGender={voiceGender}
-            setVoiceGender={setVoiceGender}
-          />
-        )}
+        {showSettings && <Settings />}
       </Screen>
     );
   }
 
   /* =====================
-     GLOBAL MENU (NON-HOME)
-     ===================== */
-  const Menu = (
-    <TopMenu
-      onHome={() => {
-        setView("home");
-      }}
-      onSettings={() => setSettingsOpen(true)}
-      onExit={() => {
-        window.location.href = "about:blank";
-      }}
-    />
-  );
-
-  /* =====================
      GAME
      ===================== */
   if (view === "game" && active) {
-    const theme = THEMES[active.theme] || THEMES.dark;
-    const lastLine = active.log[active.log.length - 1] || "";
-
     useEffect(() => {
-      speak(lastLine);
-    }, [lastLine]);
+      speak(active.log[active.log.length - 1]);
+    }, [active.log]);
 
     return (
-      <Screen settings={{ textSize, font }} theme={theme}>
-        {Menu}
+      <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+        <CornerMenu />
         <h2>{active.name}</h2>
-
-        <div>
-          {active.log.map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
-        </div>
-
+        {active.log.map((l, i) => <div key={i}>{l}</div>)}
         <Button onClick={attack}>Attack</Button>
       </Screen>
     );
   }
 
   /* =====================
-     OTHER VIEWS (LOAD / MANAGE / CUSTOM)
+     FALLBACK PAGES
      ===================== */
   return (
-    <Screen settings={{ textSize, font }} theme={THEMES.dark}>
-      {Menu}
-      <p>Feature screen in progress.</p>
+    <Screen theme={THEMES.dark} textSize={textSize} font={font}>
+      <CornerMenu />
+      <p>Menu option active.</p>
+      {showSettings && <Settings />}
     </Screen>
   );
 
@@ -186,14 +158,48 @@ export default function Home() {
     const success = roll >= dc;
     const updated = {
       ...active,
-      log: [
-        ...active.log,
-        success
-          ? `Attack succeeds (${roll} vs DC ${dc}).`
-          : `Attack fails (${roll} vs DC ${dc}).`
-      ]
+      log: [...active.log, success
+        ? `Attack succeeds (${roll} vs DC ${dc}).`
+        : `Attack fails (${roll} vs DC ${dc}).`]
     };
-    setAdventures(adventures.map(a => (a.id === active.id ? updated : a)));
+    setAdventures(adventures.map(a => a.id === active.id ? updated : a));
+  }
+
+  function Settings() {
+    return (
+      <div style={styles.settings}>
+        <h3>Settings</h3>
+
+        <label>Text Size</label>
+        <select value={textSize} onChange={e => setTextSize(e.target.value)}>
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+
+        <label>Font</label>
+        <select value={font} onChange={e => setFont(e.target.value)}>
+          <option value="serif">Serif</option>
+          <option value="sans-serif">Sans</option>
+          <option value="monospace">Monospace</option>
+        </select>
+
+        <label>
+          <input type="checkbox" checked={ttsEnabled}
+            onChange={e => setTtsEnabled(e.target.checked)} />
+          Enable Text to Audio
+        </label>
+
+        {ttsEnabled && (
+          <select value={voiceGender} onChange={e => setVoiceGender(e.target.value)}>
+            <option value="female">Female Voice</option>
+            <option value="male">Male Voice</option>
+          </select>
+        )}
+
+        <Button onClick={() => setShowSettings(false)}>Close</Button>
+      </div>
+    );
   }
 }
 
@@ -201,104 +207,53 @@ export default function Home() {
    UI COMPONENTS
    ===================== */
 
-function Screen({ children, theme, settings }) {
-  const sizeMap = { small: 14, medium: 16, large: 18 };
+function Screen({ children, theme, textSize, font }) {
+  const sizes = { small: 14, medium: 16, large: 18 };
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: 24,
-        background: theme.bg,
-        color: "#eee",
-        fontFamily: settings?.font || theme.font,
-        fontSize: sizeMap[settings?.textSize || "medium"]
-      }}
-    >
+    <div style={{
+      minHeight: "100vh",
+      padding: 24,
+      background: theme.bg,
+      color: "#eee",
+      fontFamily: font,
+      fontSize: sizes[textSize]
+    }}>
       {children}
     </div>
   );
 }
 
-function Button({ children, onClick, subtle, danger }) {
+function Button({ children, onClick, subtle }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        width: "100%",
-        padding: 14,
-        marginTop: 10,
-        background: danger ? "#400" : subtle ? "transparent" : "#222",
-        color: "#fff",
-        border: subtle ? "1px solid #333" : "none",
-        borderRadius: 6,
-        fontSize: 16
-      }}
-    >
+    <button type="button" onClick={onClick} style={{
+      width: "100%",
+      padding: 14,
+      marginTop: 10,
+      background: subtle ? "transparent" : "#222",
+      color: "#fff",
+      border: subtle ? "1px solid #333" : "none",
+      borderRadius: 6
+    }}>
       {children}
     </button>
   );
 }
 
-function TopMenu({ onHome, onSettings, onExit }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <Button onClick={onHome}>Save & Return Home</Button>
-      <Button onClick={onSettings}>Settings</Button>
-      <Button danger onClick={onExit}>Exit Application</Button>
-    </div>
-  );
-}
-
-function Settings({
-  close,
-  textSize,
-  setTextSize,
-  font,
-  setFont,
-  ttsEnabled,
-  setTtsEnabled,
-  voiceGender,
-  setVoiceGender
-}) {
-  return (
-    <div style={{ background: "#111", padding: 16, marginTop: 16 }}>
-      <h3>Settings</h3>
-
-      <label>Text Size</label>
-      <select value={textSize} onChange={e => setTextSize(e.target.value)}>
-        <option value="small">Small</option>
-        <option value="medium">Medium</option>
-        <option value="large">Large</option>
-      </select>
-
-      <label>Font</label>
-      <select value={font} onChange={e => setFont(e.target.value)}>
-        <option value="serif">Serif</option>
-        <option value="sans-serif">Sans</option>
-        <option value="monospace">Monospace</option>
-      </select>
-
-      <label>
-        <input
-          type="checkbox"
-          checked={ttsEnabled}
-          onChange={e => setTtsEnabled(e.target.checked)}
-        />
-        Enable Text to Audio
-      </label>
-
-      {ttsEnabled && (
-        <>
-          <label>Voice</label>
-          <select value={voiceGender} onChange={e => setVoiceGender(e.target.value)}>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
-          </select>
-        </>
-      )}
-
-      <Button onClick={close}>Close</Button>
-    </div>
-  );
-}
+/* =====================
+   STYLES
+   ===================== */
+const styles = {
+  menu: {
+    position: "fixed",
+    top: 10,
+    right: 10,
+    display: "flex",
+    gap: 6
+  },
+  settings: {
+    background: "#111",
+    padding: 16,
+    marginTop: 20,
+    border: "1px solid #333"
+  }
+};
