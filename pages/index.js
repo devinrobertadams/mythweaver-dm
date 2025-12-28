@@ -33,21 +33,21 @@ function dmSetTheStage({ theme, lastAction, world }) {
   const combat =
     lastAction && /attack|fight|strike|kill|charge/i.test(lastAction);
 
-  const moralFlavor =
+  const tensionText =
     world.tension > 30
-      ? "The world trembles under mounting consequences."
-      : "The balance of this realm remains fragile.";
+      ? "The world groans under the weight of your actions."
+      : "The balance of this realm feels unstable.";
 
   const text = `
 ${theme === "lovecraftian"
   ? "Reality feels thin, watched by something vast."
-  : "The world listens to your choice."}
+  : "The world listens closely."}
 
 ${lastAction
   ? `Because you chose to "${lastAction}", events begin to unfold.`
-  : "Your journey begins in uncertain silence."}
+  : "Your journey begins at the edge of the unknown."}
 
-${moralFlavor}
+${tensionText}
 `.trim();
 
   return { text, mode: combat ? "combat" : "narrative" };
@@ -94,6 +94,9 @@ export default function Home() {
   const [panel, setPanel] = useState("log");
   const [playerInput, setPlayerInput] = useState("");
 
+  /* NEW: CAMPAIGN NAME */
+  const [campaignName, setCampaignName] = useState("");
+
   /* LOAD / SAVE */
   useEffect(() => {
     try {
@@ -119,9 +122,22 @@ export default function Home() {
       <Screen theme={THEMES.dark}>
         <h1>Mythweaver</h1>
 
-        {active && <Button onClick={() => setView("game")}>Continue</Button>}
-        <Button onClick={() => setView("new")}>New Adventure</Button>
-        <Button onClick={() => setView("load")}>Load Adventure</Button>
+        {active && (
+          <Button onClick={() => setView("game")}>
+            Continue: {active.name}
+          </Button>
+        )}
+
+        <Button onClick={() => {
+          setCampaignName("");
+          setView("new");
+        }}>
+          New Adventure
+        </Button>
+
+        <Button onClick={() => setView("load")}>
+          Load Adventure
+        </Button>
       </Screen>
     );
   }
@@ -132,10 +148,25 @@ export default function Home() {
   if (view === "new") {
     return (
       <Screen theme={THEMES.dark}>
-        <h2>Create Adventure</h2>
+        <h2>Name Your Campaign</h2>
+
+        <input
+          value={campaignName}
+          onChange={e => setCampaignName(e.target.value)}
+          placeholder="The Ashen Crown..."
+          style={styles.input}
+        />
+
+        <h3>Select a Fantasy Theme</h3>
 
         {Object.entries(THEMES).map(([key, t]) => (
-          <Button key={key} onClick={() => createAdventure(key, t.name)}>
+          <Button
+            key={key}
+            onClick={() => {
+              if (!campaignName.trim()) return;
+              createAdventure(key, campaignName.trim());
+            }}
+          >
             {t.name}
           </Button>
         ))}
@@ -203,12 +234,6 @@ export default function Home() {
             <p>HP: {active.character.hp}/{active.character.maxHp}</p>
             <p>Alignment: {active.character.alignment}</p>
             <p>Influence: {active.character.influence}</p>
-
-            {active.character.traits.length > 0 && (
-              <ul>
-                {active.character.traits.map((t, i) => <li key={i}>{t}</li>)}
-              </ul>
-            )}
           </>
         )}
 
@@ -216,7 +241,8 @@ export default function Home() {
           <ul>
             {active.inventory.length === 0
               ? <li>Empty</li>
-              : active.inventory.map((i, idx) => <li key={idx}>{i}</li>)}
+              : active.inventory.map((i, idx) => <li key={idx}>{i}</li>)
+            }
           </ul>
         )}
 
@@ -234,7 +260,6 @@ export default function Home() {
      ===================== */
   function createAdventure(themeKey, name) {
     const world = { tension: 0, rumors: [] };
-
     const opening = dmSetTheStage({ theme: themeKey, world });
 
     const adv = {
@@ -363,6 +388,15 @@ const styles = {
     minHeight: 80,
     padding: 10,
     marginTop: 8,
+    background: "#111",
+    color: "#eee",
+    border: "1px solid #333",
+    borderRadius: 6
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    marginBottom: 12,
     background: "#111",
     color: "#eee",
     border: "1px solid #333",
