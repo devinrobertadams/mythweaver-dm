@@ -32,7 +32,7 @@ const THEMES = {
 };
 
 /* =====================
-   DM NARRATION (NON-REPEATING)
+   DM NARRATION (STATEFUL, NON-REPEATING)
    ===================== */
 function dmNarrate({ theme, universe, dmState }) {
   let text = "";
@@ -42,18 +42,18 @@ function dmNarrate({ theme, universe, dmState }) {
   if (!dmState.described) {
     text =
       theme === "lovecraftian"
-        ? "The world reveals itself slowly, distorted and watchful."
+        ? "The world reveals itself slowly, warped and watchful."
         : theme === "high"
-        ? "The land opens before you, rich with promise and peril."
+        ? "The land opens before you, bright with promise and hidden peril."
         : "You sense a place shaped by hardship and old scars.";
 
     if (universe?.description) text += "\n\n" + universe.description;
     nextBeat = "explore";
   } else if (dmState.lastBeat === "explore") {
-    text = "The moment lingers. Something awaits your decision.";
+    text = "The moment lingers, inviting action.";
     nextBeat = "consequence";
   } else if (dmState.lastBeat === "consequence") {
-    text = "The effects of earlier choices begin to surface.";
+    text = "Subtle consequences begin to surface.";
     nextBeat = "escalation";
   } else {
     text = "Events accelerate, forcing a decisive moment.";
@@ -87,7 +87,7 @@ function dmHandleNPC({ intent, character }) {
   const npc = {
     disposition: 0,
     knows: {
-      public: "The people here seem wary, unwilling to speak freely.",
+      public: "People here seem wary, unwilling to speak freely.",
       secret: "A hidden group meets beneath the old chapel."
     }
   };
@@ -96,18 +96,12 @@ function dmHandleNPC({ intent, character }) {
   const dc = 12 - npc.disposition;
   const check = skillCheck(mod, dc);
 
-  let text;
-  if (check.success) {
-    text =
-      intent === "insight"
-        ? "You sense deliberate concealment — something important is being hidden."
-        : npc.knows.secret;
-  } else {
-    text = npc.knows.public;
-  }
-
   return {
-    text,
+    text: check.success
+      ? intent === "insight"
+        ? "You sense deliberate concealment — something important is being hidden."
+        : npc.knows.secret
+      : npc.knows.public,
     roll: check.roll,
     success: check.success
   };
@@ -117,7 +111,7 @@ function dmHandleNPC({ intent, character }) {
    MAIN APP
    ===================== */
 export default function Home() {
-  const [view, setView] = useState("home"); // home | new | custom | load | game
+  const [view, setView] = useState("home");
   const [adventures, setAdventures] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
@@ -128,31 +122,63 @@ export default function Home() {
   const [mode, setMode] = useState("narrative");
   const [panel, setPanel] = useState("story");
 
+  /* SETTINGS */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fontSize, setFontSize] = useState("16px");
+  const [fontFamily, setFontFamily] = useState("serif");
+
   /* LOAD / SAVE */
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("adventures") || "[]");
+    const savedSettings = JSON.parse(localStorage.getItem("settings") || "{}");
+
     if (Array.isArray(saved)) {
       setAdventures(saved);
       if (saved.length) setActiveId(saved[saved.length - 1].id);
     }
+
+    if (savedSettings.fontSize) setFontSize(savedSettings.fontSize);
+    if (savedSettings.fontFamily) setFontFamily(savedSettings.fontFamily);
   }, []);
 
   useEffect(() => {
     localStorage.setItem("adventures", JSON.stringify(adventures));
   }, [adventures]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ fontSize, fontFamily })
+    );
+  }, [fontSize, fontFamily]);
+
   const active = adventures.find(a => a.id === activeId);
 
   /* =====================
-     HOME
+     HOME (SETTINGS RESTORED)
      ===================== */
   if (view === "home") {
     return (
-      <Screen theme={THEMES.dark}>
+      <Screen theme={THEMES.dark} fontFamily={fontFamily} fontSize={fontSize}>
         <h1>Mythweaver</h1>
+
         {active && <Button onClick={() => setView("game")}>Continue</Button>}
         <Button onClick={() => setView("new")}>New Campaign</Button>
         <Button onClick={() => setView("load")}>Load Campaign</Button>
+
+        <Button subtle onClick={() => setSettingsOpen(true)}>
+          Settings
+        </Button>
+
+        {settingsOpen && (
+          <Settings
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            fontFamily={fontFamily}
+            setFontFamily={setFontFamily}
+            close={() => setSettingsOpen(false)}
+          />
+        )}
       </Screen>
     );
   }
@@ -162,7 +188,12 @@ export default function Home() {
      ===================== */
   if (view === "new") {
     return (
-      <Screen theme={THEMES.dark}>
+      <Screen theme={THEMES.dark} fontFamily={fontFamily} fontSize={fontSize}>
+        <CornerMenu
+          onHome={() => setView("home")}
+          onSettings={() => setSettingsOpen(true)}
+        />
+
         <input
           value={campaignName}
           onChange={e => setCampaignName(e.target.value)}
@@ -177,7 +208,6 @@ export default function Home() {
         </Button>
 
         <Button onClick={() => setView("custom")}>Build Custom World</Button>
-        <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
   }
@@ -187,15 +217,20 @@ export default function Home() {
      ===================== */
   if (view === "custom") {
     return (
-      <Screen theme={THEMES.dark}>
+      <Screen theme={THEMES.dark} fontFamily={fontFamily} fontSize={fontSize}>
+        <CornerMenu
+          onHome={() => setView("home")}
+          onSettings={() => setSettingsOpen(true)}
+        />
+
         <textarea
           value={customWorld}
           onChange={e => setCustomWorld(e.target.value)}
           placeholder="Describe your world…"
           style={styles.textarea}
         />
+
         <Button onClick={createCustomAdventure}>Begin Campaign</Button>
-        <Button subtle onClick={() => setView("new")}>Back</Button>
       </Screen>
     );
   }
@@ -205,7 +240,12 @@ export default function Home() {
      ===================== */
   if (view === "load") {
     return (
-      <Screen theme={THEMES.dark}>
+      <Screen theme={THEMES.dark} fontFamily={fontFamily} fontSize={fontSize}>
+        <CornerMenu
+          onHome={() => setView("home")}
+          onSettings={() => setSettingsOpen(true)}
+        />
+
         {adventures.map(a => (
           <Button key={a.id} onClick={() => {
             setActiveId(a.id);
@@ -214,7 +254,6 @@ export default function Home() {
             {a.name}
           </Button>
         ))}
-        <Button subtle onClick={() => setView("home")}>Back</Button>
       </Screen>
     );
   }
@@ -224,7 +263,16 @@ export default function Home() {
      ===================== */
   if (view === "game" && active) {
     return (
-      <Screen theme={THEMES[active.theme]}>
+      <Screen
+        theme={THEMES[active.theme]}
+        fontFamily={fontFamily}
+        fontSize={fontSize}
+      >
+        <CornerMenu
+          onHome={() => setView("home")}
+          onSettings={() => setSettingsOpen(true)}
+        />
+
         <h2>{active.name}</h2>
 
         <div style={{ display: "flex", gap: 6 }}>
@@ -235,14 +283,12 @@ export default function Home() {
         {panel === "story" && (
           <>
             {active.log.map((l, i) => <p key={i}>{l}</p>)}
-
             <textarea
               value={playerInput}
               onChange={e => setPlayerInput(e.target.value)}
               placeholder="What do you do?"
               style={styles.textarea}
             />
-
             <Button onClick={handleAction}>Continue</Button>
           </>
         )}
@@ -260,6 +306,16 @@ export default function Home() {
         )}
 
         {mode === "combat" && <Button>Attack</Button>}
+
+        {settingsOpen && (
+          <Settings
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            fontFamily={fontFamily}
+            setFontFamily={setFontFamily}
+            close={() => setSettingsOpen(false)}
+          />
+        )}
       </Screen>
     );
   }
@@ -369,18 +425,30 @@ export default function Home() {
 }
 
 /* =====================
-   UI
+   UI COMPONENTS
    ===================== */
-function Screen({ children, theme }) {
+function Screen({ children, theme, fontFamily, fontSize }) {
   return (
     <div style={{
       minHeight: "100vh",
       padding: 24,
       background: theme.bg,
       color: "#eee",
-      fontFamily: theme.font
+      fontFamily,
+      fontSize
     }}>
       {children}
+    </div>
+  );
+}
+
+function CornerMenu({ onHome, onSettings }) {
+  return (
+    <div style={{ position: "absolute", top: 12, right: 12 }}>
+      <div style={styles.menu}>
+        <Button onClick={onHome}>Home</Button>
+        <Button onClick={onSettings}>Settings</Button>
+      </div>
     </div>
   );
 }
@@ -404,13 +472,37 @@ function Button({ children, onClick, subtle }) {
   );
 }
 
+function Settings({ fontSize, setFontSize, fontFamily, setFontFamily, close }) {
+  return (
+    <div style={styles.settings}>
+      <h3>Settings</h3>
+
+      <label>Font Size</label>
+      <select value={fontSize} onChange={e => setFontSize(e.target.value)}>
+        <option value="14px">Small</option>
+        <option value="16px">Medium</option>
+        <option value="18px">Large</option>
+      </select>
+
+      <label>Font</label>
+      <select value={fontFamily} onChange={e => setFontFamily(e.target.value)}>
+        <option value="serif">Serif</option>
+        <option value="sans-serif">Sans Serif</option>
+        <option value="monospace">Monospace</option>
+      </select>
+
+      <Button onClick={close}>Close</Button>
+    </div>
+  );
+}
+
 /* =====================
    STYLES
    ===================== */
 const styles = {
   textarea: {
     width: "100%",
-    minHeight: 80,
+    minHeight: 90,
     padding: 10,
     marginTop: 8,
     background: "#111",
@@ -424,6 +516,19 @@ const styles = {
     marginBottom: 12,
     background: "#111",
     color: "#eee",
+    border: "1px solid #333",
+    borderRadius: 6
+  },
+  menu: {
+    background: "#111",
+    padding: 10,
+    border: "1px solid #333",
+    borderRadius: 6
+  },
+  settings: {
+    background: "#111",
+    padding: 16,
+    marginTop: 16,
     border: "1px solid #333",
     borderRadius: 6
   }
